@@ -1,0 +1,29 @@
+# Environment variables
+.env
+
+# Google Cloud credentials
+vald-bigquery-credentials.json
+*-credentials.json
+
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Build files
+client/build/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Generated PDFs (optional - remove if you want to track them)
+generated-reports/

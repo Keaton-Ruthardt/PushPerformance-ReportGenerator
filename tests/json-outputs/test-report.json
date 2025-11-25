@@ -1,0 +1,80 @@
+{
+  "athlete": {
+    "athlete_id": "test001",
+    "athlete_name": "Test Athlete",
+    "age": 22,
+    "sport": "Baseball",
+    "position": "Pitcher",
+    "school_team": "Test University",
+    "assessment_date": "2025-01-15",
+    "height": "6'2\"",
+    "body_mass": 185.5,
+    "current_injuries": "None",
+    "injury_history": "Minor shoulder strain 2023",
+    "posture_presentation": "Good overall posture, slight forward head posture noted",
+    "movement_analysis_summary": "Demonstrates good movement patterns overall. Some compensatory patterns noted during overhead movements.",
+    "training_goals": "1. Improve power output\n2. Enhance single-leg stability\n3. Reduce asymmetry in lower body strength",
+    "action_plan": "1. Implement single-leg strength training 2x/week\n2. Address mobility restrictions in thoracic spine\n3. Progressive plyometric training for power development"
+  },
+  "testResults": [
+    {
+      "test_type": "CMJ",
+      "test_data": {
+        "jump_height": 45.5,
+        "peak_power": 4250.0,
+        "peak_force": 2100.0,
+        "rsi": 0.85
+      },
+      "key_takeaways": "Excellent jump height, above 75th percentile. Good power production. Continue explosive training."
+    },
+    {
+      "test_type": "SJ",
+      "test_data": {
+        "jump_height": 42.3,
+        "peak_power": 4100.0,
+        "peak_force": 2050.0
+      },
+      "key_takeaways": "Solid squat jump performance. Slight decrease from CMJ suggests good use of stretch-shortening cycle."
+    },
+    {
+      "test_type": "HT",
+      "test_data": {
+        "contact_time": 0.18,
+        "jump_height": 25.6,
+        "rsi": 1.42
+      },
+      "key_takeaways": "Excellent reactive strength. RSI above average. Focus on maintaining this through season."
+    },
+    {
+      "test_type": "SL CMJ",
+      "test_data": {
+        "left_jump_height": 28.5,
+        "right_jump_height": 32.1,
+        "left_peak_power": 1850.0,
+        "right_peak_power": 2100.0,
+        "asymmetry": 11.9
+      },
+      "key_takeaways": "Moderate asymmetry detected (11.9%). Right leg shows better performance. Prioritize left leg strengthening."
+    },
+    {
+      "test_type": "IMTP",
+      "test_data": {
+        "peak_force": 3200.0,
+        "rate_of_force_development": 8500.0,
+        "time_to_peak_force": 1.2
+      },
+      "key_takeaways": "Strong maximal strength. RFD could be improved with explosive training."
+    },
+    {
+      "test_type": "PPU",
+      "test_data": {
+        "left_peak_force": 450.0,
+        "right_peak_force": 485.0,
+        "left_avg_force": 380.0,
+        "right_avg_force": 410.0,
+        "asymmetry": 7.5
+      },
+      "key_takeaways": "Good upper body strength. Minor asymmetry (7.5%) within acceptable range."
+    }
+  ]
+}

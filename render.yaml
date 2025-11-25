@@ -1,0 +1,58 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: push-performance-db
+    env: docker
+    plan: starter
+    region: oregon
+    databaseName: push_performance
+    databaseUser: push_user
+
+  # Backend API Server
+  - type: web
+    name: push-performance-api
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DB_HOST
+        fromDatabase:
+          name: push-performance-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: push-performance-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: push-performance-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: push-performance-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: push-performance-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: VALD_API_URL
+        sync: false
+      - key: VALD_API_KEY
+        sync: false
+      - key: VALD_API_SECRET
+        sync: false
+      - key: TRAINER_USERNAME
+        value: pushtrainer
+      - key: TRAINER_PASSWORD
+        sync: false
+      - key: PERCENTILE_SYNC_SCHEDULE
+        value: "0 3 * * *"

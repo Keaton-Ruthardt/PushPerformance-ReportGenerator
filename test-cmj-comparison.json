@@ -1,0 +1,17 @@
+{
+  "athleteMetrics": {
+    "jumpHeight": 55.2,
+    "eccentricBrakingRFD": 11500,
+    "forceAtZeroVelocity": 2800,
+    "eccentricPeakForce": 2900,
+    "concentricImpulse": 310,
+    "eccentricPeakVelocity": -1.45,
+    "concentricPeakVelocity": 3.25,
+    "eccentricPeakPower": 3100,
+    "eccentricPeakPowerBM": 32.5,
+    "peakPower": 6500,
+    "peakPowerBM": 68.0,
+    "rsiMod": 78.5,
+    "countermovementDepth": -35.0
+  }
+}
