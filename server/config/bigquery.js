@@ -15,7 +15,17 @@ let bigQueryConfig = {
   projectId: process.env.BIGQUERY_PROJECT_ID || 'vald-ref-data-copy'
 };
 
-if (process.env.BIGQUERY_CREDENTIALS) {
+if (process.env.BIGQUERY_CREDENTIALS_BASE64) {
+  // Production: Decode base64-encoded credentials
+  try {
+    const decoded = Buffer.from(process.env.BIGQUERY_CREDENTIALS_BASE64, 'base64').toString('utf8');
+    bigQueryConfig.credentials = JSON.parse(decoded);
+    console.log('✅ Using BigQuery credentials from BIGQUERY_CREDENTIALS_BASE64 environment variable');
+  } catch (error) {
+    console.error('❌ Failed to decode BIGQUERY_CREDENTIALS_BASE64:', error.message);
+    throw new Error('Invalid BIGQUERY_CREDENTIALS_BASE64 format');
+  }
+} else if (process.env.BIGQUERY_CREDENTIALS) {
   // Production: Parse credentials from environment variable (JSON string)
   try {
     bigQueryConfig.credentials = JSON.parse(process.env.BIGQUERY_CREDENTIALS);
