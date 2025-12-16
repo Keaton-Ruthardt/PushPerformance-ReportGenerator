@@ -221,9 +221,10 @@ async function buildTable() {
             console.log(`    📊 Found ${trials.length} trial(s)`);
 
             // Calculate best 5 averages for ALL THREE metrics using exact field names
-            const rsi_avg = calculateBest5Average(trials, 'RSI_MODIFIED');
-            const jumpHeight_avg = calculateBest5Average(trials, 'JUMP_HEIGHT');
-            const gct_avg = calculateBest5Average(trials, 'CONTRACTION_TIME');
+            // IMPORTANT: Must use same field names as reportRoutes.js (lines 61, 63, 65)
+            const rsi_avg = calculateBest5Average(trials, 'HOP_RSI');
+            const jumpHeight_avg = calculateBest5Average(trials, 'HOP_JUMP_HEIGHT');
+            const gct_avg = calculateBest5Average(trials, 'HOP_CONTACT_TIME');
 
             // Only insert if we have at least one metric
             if (rsi_avg !== null || jumpHeight_avg !== null || gct_avg !== null) {
@@ -245,7 +246,7 @@ async function buildTable() {
               allRows.push(row);
               totalTests++;
 
-              console.log(`    ✅ RSI=${rsi_avg?.toFixed(2) || 'N/A'}, JH=${jumpHeight_avg?.toFixed(2) || 'N/A'}cm, GCT=${gct_avg?.toFixed(3) || 'N/A'}ms`);
+              console.log(`    ✅ RSI=${rsi_avg?.toFixed(2) || 'N/A'}, JH=${jumpHeight_avg?.toFixed(2) || 'N/A'}cm, GCT=${gct_avg?.toFixed(4) || 'N/A'}s`);
 
               // Insert in batches of 100
               if (allRows.length >= 100) {

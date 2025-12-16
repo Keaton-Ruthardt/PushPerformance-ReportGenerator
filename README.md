@@ -169,23 +169,28 @@ curl -X POST http://localhost:5000/api/auth/login \
 
 ## Deployment to Render
 
-1. **Create a new Web Service on Render**
+**📋 Quick Start**: See [DEPLOY_CHECKLIST.md](./DEPLOY_CHECKLIST.md)
 
-2. **Connect your GitHub repository**
+**📚 Complete Guide**: See [DEPLOYMENT.md](./DEPLOYMENT.md)
 
-3. **Configure environment variables** in Render dashboard
+**🔐 Environment Variables**: See [ENV_VARIABLES.md](./ENV_VARIABLES.md)
 
-4. **Add PostgreSQL database** via Render (or use external service)
+### Quick Deploy Steps:
 
-5. **Build Command:**
-   ```bash
-   npm install
-   ```
+1. Push code to GitHub
+2. Create Web Service on Render (or use Blueprint with `render.yaml`)
+3. Set environment variables (see `ENV_VARIABLES.md`)
+4. Upload BigQuery credentials as secret file
+5. Add disk for Puppeteer cache
+6. Deploy!
 
-6. **Start Command:**
-   ```bash
-   npm run server
-   ```
+The app includes:
+- React frontend (Vite build)
+- Node.js/Express backend
+- Puppeteer PDF generation
+- BigQuery integration
+- Professional athlete filtering
+- Spider chart metric selector
 
 ## Important Notes
 

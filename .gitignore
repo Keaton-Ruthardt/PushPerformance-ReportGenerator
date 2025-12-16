@@ -1,9 +1,16 @@
 # Environment variables
 .env
+.env.example
 
 # Google Cloud credentials
 vald-bigquery-credentials.json
 *-credentials.json
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!client/package.json
+!client/package-lock.json
 
 # Dependencies
 node_modules/
@@ -11,20 +18,49 @@ client/node_modules/
 
 # Build files
 client/build/
+client/dist/
 dist/
 
 # Logs
 *.log
 npm-debug.log*
+yarn-error.log*
 
 # OS files
 .DS_Store
 Thumbs.db
+*.png
+*.jpg
+*.jpeg
+*.gif
+!client/public/*.png
+!client/public/*.jpg
+!client/public/*.svg
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Generated PDFs (optional - remove if you want to track them)
+# Generated PDFs and Reports
 generated-reports/
-vald-ref-data-copy-0c0792ad4944.json
+reports/
+*.pdf
+
+# Debug and test scripts (temporary)
+check-*.js
+debug-*.js
+test-*.js
+find-*.js
+get-*.js
+fix-*.js
+diagnose-*.js
+compare-*.js
+sync-*.js
+populate-*.js
+build-*.js
+
+# Deployment guides (keep only the main ones)
+QUICK_DEPLOY.md
+DEPLOYMENT_GUIDE.md

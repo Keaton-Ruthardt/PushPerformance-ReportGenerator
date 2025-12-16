@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
+import path from 'path';
+import { fileURLToPath } from 'url';
 // import pool from './config/database.js'; // Deprecated - using BigQuery
 import { testConnection } from './config/bigquery.js';
 // import syncPercentiles from './scripts/syncPercentiles.js';
@@ -13,6 +15,10 @@ import reportRoutes from './routes/reportRoutes.js'; // Using reportRoutes.js wi
 import athletePerformanceRoutes from './routes/athletePerformance.js';
 import cmjRoutes from './routes/cmj.js';
 import pdfRoutes from './routes/pdf.js';
+
+// ES module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -36,6 +42,19 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/performance', athletePerformanceRoutes);
 app.use('/api/cmj', cmjRoutes);
 app.use('/api/pdf', pdfRoutes);
+
+// Serve React static files in production
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from Vite build (dist folder)
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+
+  // Handle React routing - return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+  });
+} else {
+  console.log('🔧 Running in development mode - React dev server should be running separately');
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {

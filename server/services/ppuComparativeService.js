@@ -15,6 +15,17 @@ const PPU_METRICS = {
   eccentricBrakingRFD: 'ECCENTRIC_BRAKING_RFD_Trial_N_per_s'
 };
 
+// Metrics that need to be converted from cm to inches for display
+const CM_TO_INCHES_METRICS = ['pushupHeight'];
+
+/**
+ * Convert centimeters to inches
+ */
+function cmToInches(cm) {
+  if (cm === null || cm === undefined) return null;
+  return cm / 2.54;
+}
+
 /**
  * Get professional athlete bucket statistics for all PPU metrics
  * Returns mean, std dev, and percentile distribution for each metric
@@ -145,18 +156,20 @@ async function getPPUComparativeAnalysis(ppuData) {
 
       if (value !== null && value !== undefined) {
         const percentile = calculatePercentile(value, metricKey, proStats);
+        const needsConversion = CM_TO_INCHES_METRICS.includes(metricKey);
 
         analysis.metrics[metricKey] = {
-          value: value,
+          value: needsConversion ? cmToInches(value) : value, // Convert to inches for display
           percentile: Math.round(percentile),
-          proMean: proStats[`${metricKey}_mean`],
-          proStdDev: proStats[`${metricKey}_stddev`],
-          proMin: proStats[`${metricKey}_min`],
-          proMax: proStats[`${metricKey}_max`],
-          proP50: proStats[`${metricKey}_p50`],
-          proP75: proStats[`${metricKey}_p75`],
-          proP90: proStats[`${metricKey}_p90`],
-          rating: getPerformanceRating(percentile)
+          proMean: needsConversion ? cmToInches(proStats[`${metricKey}_mean`]) : proStats[`${metricKey}_mean`],
+          proStdDev: needsConversion ? cmToInches(proStats[`${metricKey}_stddev`]) : proStats[`${metricKey}_stddev`],
+          proMin: needsConversion ? cmToInches(proStats[`${metricKey}_min`]) : proStats[`${metricKey}_min`],
+          proMax: needsConversion ? cmToInches(proStats[`${metricKey}_max`]) : proStats[`${metricKey}_max`],
+          proP50: needsConversion ? cmToInches(proStats[`${metricKey}_p50`]) : proStats[`${metricKey}_p50`],
+          proP75: needsConversion ? cmToInches(proStats[`${metricKey}_p75`]) : proStats[`${metricKey}_p75`],
+          proP90: needsConversion ? cmToInches(proStats[`${metricKey}_p90`]) : proStats[`${metricKey}_p90`],
+          rating: getPerformanceRating(percentile),
+          unit: needsConversion ? 'in' : '' // Add unit indicator
         };
 
         console.log(`  ${metricKey}: ${value} → ${Math.round(percentile)}th percentile (${analysis.metrics[metricKey].rating})`);

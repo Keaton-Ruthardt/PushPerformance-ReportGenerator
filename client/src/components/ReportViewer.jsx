@@ -10,6 +10,7 @@ import {
   Legend
 } from 'chart.js';
 import axios from 'axios';
+import MetricSelector from './MetricSelector';
 import './ReportViewer.css';
 
 // Register ChartJS components
@@ -26,6 +27,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [generatingProgress, setGeneratingProgress] = useState(0);
   const [activeTab, setActiveTab] = useState('initial-assessment');
 
   // Editable athlete info
@@ -67,6 +69,15 @@ const ReportViewer = ({ athlete, selectedTests }) => {
     actionPlan: ''
   });
 
+  // Selected metrics for spider charts
+  const [selectedMetrics, setSelectedMetrics] = useState({
+    cmj: ['jumpHeight', 'rsi', 'peakPowerBM', 'eccentricBrakingRFD', 'concentricPeakVelocity', 'eccentricPeakPowerBM'],
+    squatJump: ['jumpHeight', 'forceAtPeakPower', 'concentricPeakVelocity', 'peakPower', 'peakPowerBM'],
+    hopTest: ['rsi', 'jumpHeight', 'gct'],
+    imtp: ['peakVerticalForce', 'peakForceBM', 'forceAt100ms', 'timeToPeakForce'],
+    ppu: ['pushupHeight', 'eccentricPeakForce', 'concentricPeakForce', 'concentricRFD_L', 'concentricRFD_R', 'eccentricBrakingRFD']
+  });
+
   // Tab definitions - filter based on available test data
   const getAvailableTabs = () => {
     const allTabs = [
@@ -96,6 +107,63 @@ const ReportViewer = ({ athlete, selectedTests }) => {
   };
 
   const tabs = getAvailableTabs();
+
+  // Define all available metrics for each test type
+  const getAvailableMetrics = (testType) => {
+    const allMetrics = {
+      cmj: [
+        { key: 'jumpHeight', label: 'Jump Height' },
+        { key: 'rsi', label: 'RSI' },
+        { key: 'peakPowerBM', label: 'Peak Power / BM' },
+        { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD' },
+        { key: 'concentricPeakVelocity', label: 'Con Peak Velocity' },
+        { key: 'eccentricPeakPowerBM', label: 'Ecc Peak Power / BM' },
+        { key: 'forceAtZeroVelocity', label: 'Force @ Zero Velocity' },
+        { key: 'eccentricPeakForce', label: 'Ecc Peak Force' },
+        { key: 'concentricImpulse', label: 'Concentric Impulse' },
+        { key: 'eccentricPeakVelocity', label: 'Ecc Peak Velocity' },
+        { key: 'eccentricPeakPower', label: 'Ecc Peak Power' },
+        { key: 'peakPower', label: 'Peak Power' },
+        { key: 'countermovementDepth', label: 'Countermovement Depth' }
+      ],
+      squatJump: [
+        { key: 'jumpHeight', label: 'Jump Height' },
+        { key: 'forceAtPeakPower', label: 'Force @ Peak Power' },
+        { key: 'concentricPeakVelocity', label: 'Con Peak Velocity' },
+        { key: 'peakPower', label: 'Peak Power' },
+        { key: 'peakPowerBM', label: 'Peak Power / BW' }
+      ],
+      hopTest: [
+        { key: 'rsi', label: 'RSI' },
+        { key: 'jumpHeight', label: 'Jump Height' },
+        { key: 'gct', label: 'Ground Contact Time' }
+      ],
+      imtp: [
+        { key: 'peakVerticalForce', label: 'Peak Vertical Force' },
+        { key: 'peakForceBM', label: 'Peak Force / BM' },
+        { key: 'forceAt100ms', label: 'Force @ 100ms' },
+        { key: 'timeToPeakForce', label: 'Time to Peak Force' }
+      ],
+      ppu: [
+        { key: 'pushupHeight', label: 'Push-Up Height' },
+        { key: 'eccentricPeakForce', label: 'Ecc Peak Force' },
+        { key: 'concentricPeakForce', label: 'Con Peak Force' },
+        { key: 'concentricRFD_L', label: 'Con RFD (L)' },
+        { key: 'concentricRFD_R', label: 'Con RFD (R)' },
+        { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD' }
+      ]
+    };
+
+    return allMetrics[testType] || [];
+  };
+
+  // Handler to update selected metrics for a specific test type
+  const handleMetricsChange = (testType, newMetrics) => {
+    setSelectedMetrics(prev => ({
+      ...prev,
+      [testType]: newMetrics
+    }));
+  };
 
   useEffect(() => {
     if (athlete) {
@@ -185,6 +253,8 @@ const ReportViewer = ({ athlete, selectedTests }) => {
 
   const generatePDF = async () => {
     setSaving(true);
+    setGeneratingProgress(0); // Start progress
+
     try {
       const reportPayload = {
         ...reportData,
@@ -196,12 +266,24 @@ const ReportViewer = ({ athlete, selectedTests }) => {
         imtpRecommendations: imtpRecommendations,
         slCmjRecommendations: slCmjRecommendations,
         ppuRecommendations: ppuRecommendations,
-        trainingGoals: trainingGoals
+        trainingGoals: trainingGoals,
+        selectedMetrics: selectedMetrics  // Include selected metrics for spider charts
       };
+
+      // Simulate progress updates - slower to match actual PDF generation time
+      const progressInterval = setInterval(() => {
+        setGeneratingProgress(prev => {
+          if (prev >= 90) return prev; // Cap at 90% until complete
+          return prev + 3;
+        });
+      }, 2000);
 
       const response = await axios.post('/api/reports/generate-pdf', reportPayload, {
         responseType: 'blob'
       });
+
+      clearInterval(progressInterval);
+      setGeneratingProgress(100); // Complete
 
       // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -211,25 +293,26 @@ const ReportViewer = ({ athlete, selectedTests }) => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+
+      // Wait a bit to show 100% before closing
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Error generating PDF. Please try again.');
     } finally {
       setSaving(false);
+      setGeneratingProgress(0); // Reset
     }
   };
 
   const getSpiderChartData = () => {
     if (!reportData?.tests?.cmj || !reportData?.cmjComparison?.metrics) return null;
 
-    const keyMetrics = [
-      { key: 'jumpHeight', label: 'Jump Height' },
-      { key: 'rsiMod', label: 'RSI-mod' },
-      { key: 'peakPowerBM', label: 'Peak Power / BM' },
-      { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD' },
-      { key: 'concentricPeakVelocity', label: 'Con Peak Velocity' },
-      { key: 'eccentricPeakPowerBM', label: 'Ecc Peak Power / BM' }
-    ];
+    // Get all available metrics and filter to only selected ones
+    const allMetrics = getAvailableMetrics('cmj');
+    const keyMetrics = allMetrics.filter(metric =>
+      selectedMetrics.cmj.includes(metric.key)
+    );
 
     const labels = [];
     const athleteValues = [];
@@ -281,13 +364,11 @@ const ReportViewer = ({ athlete, selectedTests }) => {
   const getSJSpiderChartData = () => {
     if (!reportData?.tests?.squatJump || !reportData?.sjComparison?.metrics) return null;
 
-    const keyMetrics = [
-      { key: 'jumpHeight', label: 'Jump Height' },
-      { key: 'forceAtPeakPower', label: 'Force @ Peak Power' },
-      { key: 'concentricPeakVelocity', label: 'Con Peak Velocity' },
-      { key: 'peakPower', label: 'Peak Power' },
-      { key: 'peakPowerBM', label: 'Peak Power / BW' }
-    ];
+    // Get all available metrics and filter to only selected ones
+    const allMetrics = getAvailableMetrics('squatJump');
+    const keyMetrics = allMetrics.filter(metric =>
+      selectedMetrics.squatJump.includes(metric.key)
+    );
 
     const labels = [];
     const athleteValues = [];
@@ -339,12 +420,11 @@ const ReportViewer = ({ athlete, selectedTests }) => {
   const getIMTPSpiderChartData = () => {
     if (!reportData?.tests?.imtp || !reportData?.imtpComparison?.metrics) return null;
 
-    const keyMetrics = [
-      { key: 'peakVerticalForce', label: 'Peak Vertical Force' },
-      { key: 'peakForceBM', label: 'Peak Force / BM' },
-      { key: 'forceAt100ms', label: 'Force @ 100ms' },
-      { key: 'timeToPeakForce', label: 'Time to Peak Force' }
-    ];
+    // Get all available metrics and filter to only selected ones
+    const allMetrics = getAvailableMetrics('imtp');
+    const keyMetrics = allMetrics.filter(metric =>
+      selectedMetrics.imtp.includes(metric.key)
+    );
 
     const labels = [];
     const athleteValues = [];
@@ -397,14 +477,11 @@ const ReportViewer = ({ athlete, selectedTests }) => {
   const getPPUSpiderChartData = () => {
     if (!reportData?.tests?.ppu || !reportData?.ppuComparison?.metrics) return null;
 
-    const keyMetrics = [
-      { key: 'pushupHeight', label: 'Pushup Height' },
-      { key: 'eccentricPeakForce', label: 'Ecc Peak Force' },
-      { key: 'concentricPeakForce', label: 'Con Peak Force' },
-      { key: 'concentricRFD_L', label: 'Con RFD L' },
-      { key: 'concentricRFD_R', label: 'Con RFD R' },
-      { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD' }
-    ];
+    // Get all available metrics and filter to only selected ones
+    const allMetrics = getAvailableMetrics('ppu');
+    const keyMetrics = allMetrics.filter(metric =>
+      selectedMetrics.ppu.includes(metric.key)
+    );
 
     const labels = [];
     const athleteValues = [];
@@ -458,8 +535,8 @@ const ReportViewer = ({ athlete, selectedTests }) => {
     if (!reportData?.tests?.cmj || !reportData?.cmjComparison?.metrics) return {};
 
     const metrics = [
-      { key: 'jumpHeight', label: 'Jump Height', unit: 'cm' },
-      { key: 'rsiMod', label: 'RSI-mod', unit: '' },
+      { key: 'jumpHeight', label: 'Jump Height', unit: 'in' },
+      { key: 'rsi', label: 'RSI', unit: '' },  // Standard RSI (changed from RSI-mod)
       { key: 'peakPowerBM', label: 'Peak Power / BM', unit: 'W/kg' },
       { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD', unit: 'N/s' },
       { key: 'concentricPeakVelocity', label: 'Con Peak Velocity', unit: 'm/s' },
@@ -469,6 +546,10 @@ const ReportViewer = ({ athlete, selectedTests }) => {
     return {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 800,
+        easing: 'easeInOutQuart'
+      },
       plugins: {
         legend: {
           position: 'top',
@@ -520,7 +601,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
     if (!reportData?.tests?.squatJump || !reportData?.sjComparison?.metrics) return {};
 
     const metrics = [
-      { key: 'jumpHeight', label: 'Jump Height', unit: 'cm' },
+      { key: 'jumpHeight', label: 'Jump Height', unit: 'in' },
       { key: 'forceAtPeakPower', label: 'Force @ Peak Power', unit: 'N' },
       { key: 'concentricPeakVelocity', label: 'Con Peak Velocity', unit: 'm/s' },
       { key: 'peakPower', label: 'Peak Power', unit: 'W' },
@@ -639,7 +720,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
     if (!reportData?.tests?.ppu || !reportData?.ppuComparison?.metrics) return {};
 
     const metrics = [
-      { key: 'pushupHeight', label: 'Pushup Height', unit: 'cm' },
+      { key: 'pushupHeight', label: 'Pushup Height', unit: 'in' },
       { key: 'eccentricPeakForce', label: 'Ecc Peak Force', unit: 'N' },
       { key: 'concentricPeakForce', label: 'Con Peak Force', unit: 'N' },
       { key: 'concentricRFD_L', label: 'Con RFD L', unit: 'N/s' },
@@ -664,7 +745,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
               const metric = metrics.find(m => m.label === context.label);
               if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
 
-              const athleteValue = reportData.tests.ppu[metric.key];
+              const athleteValue = reportData.ppuComparison.metrics[metric.key]?.value;
               const mlbValue = reportData.ppuComparison.metrics[metric.key]?.proMean;
               const percentile = reportData.ppuComparison.metrics[metric.key]?.percentile;
 
@@ -699,11 +780,11 @@ const ReportViewer = ({ athlete, selectedTests }) => {
   const getHopTestSpiderChartData = () => {
     if (!reportData?.tests?.hopTest || !reportData?.hopComparison?.metrics) return null;
 
-    const keyMetrics = [
-      { key: 'rsi', label: 'RSI' },
-      { key: 'jumpHeight', label: 'Jump Height' },
-      { key: 'gct', label: 'GCT' }
-    ];
+    // Get all available metrics and filter to only selected ones
+    const allMetrics = getAvailableMetrics('hopTest');
+    const keyMetrics = allMetrics.filter(metric =>
+      selectedMetrics.hopTest.includes(metric.key)
+    );
 
     const labels = [];
     const athleteValues = [];
@@ -757,7 +838,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
 
     const metrics = [
       { key: 'rsi', label: 'RSI', unit: '' },
-      { key: 'jumpHeight', label: 'Jump Height', unit: 'cm' },
+      { key: 'jumpHeight', label: 'Jump Height', unit: 'in' },
       { key: 'gct', label: 'GCT', unit: 's' }
     ];
 
@@ -835,7 +916,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
             <h2>Initial Assessment</h2>
             <div className="assessment-section">
               <div className="assessment-field">
-                <label>Current Injuries</label>
+                <label>Current Status</label>
                 <textarea
                   value={initialAssessment.currentInjuries}
                   onChange={(e) => setInitialAssessment({...initialAssessment, currentInjuries: e.target.value})}
@@ -898,7 +979,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                     <tbody>
                       <tr>
                         <td>Jump Height</td>
-                        <td>{reportData.tests.cmj.jumpHeight?.toFixed(2) || 'N/A'} cm</td>
+                        <td>{reportData.tests.cmj.jumpHeight ? `${(reportData.tests.cmj.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
                         <td>{reportData.cmjComparison?.metrics?.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
@@ -952,9 +1033,9 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                         <td>{reportData.cmjComparison?.metrics?.peakPowerBM?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
-                        <td>RSI-mod</td>
-                        <td>{reportData.tests.cmj.rsiMod?.toFixed(2) || 'N/A'} m/s</td>
-                        <td>{reportData.cmjComparison?.metrics?.rsiMod?.percentile?.toFixed(1) || 'N/A'}%</td>
+                        <td>RSI</td>
+                        <td>{reportData.tests.cmj.rsi?.toFixed(2) || 'N/A'}</td>
+                        <td>{reportData.cmjComparison?.metrics?.rsi?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
                         <td>Countermovement Depth</td>
@@ -965,7 +1046,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                   </table>
                   {reportData.cmjComparison && (
                     <p className="comparison-note">
-                      Compared against {reportData.cmjComparison.totalProTests} professional baseball players from MLB/MiLB
+                      Compared against professional baseball players from MLB/MiLB
                     </p>
                   )}
                 </div>
@@ -975,6 +1056,15 @@ const ReportViewer = ({ athlete, selectedTests }) => {
             {/* Spider Chart */}
             <div className="spider-chart-section">
               <h3>Performance Comparison</h3>
+
+              {/* Metric Selector */}
+              <MetricSelector
+                testType="cmj"
+                availableMetrics={getAvailableMetrics('cmj')}
+                selectedMetrics={selectedMetrics.cmj}
+                onMetricsChange={(newMetrics) => handleMetricsChange('cmj', newMetrics)}
+              />
+
               <div className="spider-chart-container">
                 {getSpiderChartData() && (
                   <Radar data={getSpiderChartData()} options={getCMJChartOptions()} />
@@ -1016,7 +1106,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                     <tbody>
                       <tr>
                         <td>Jump Height</td>
-                        <td>{reportData.tests.squatJump.jumpHeight?.toFixed(2) || 'N/A'} cm</td>
+                        <td>{reportData.tests.squatJump.jumpHeight ? `${(reportData.tests.squatJump.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
                         <td>{reportData.sjComparison?.metrics?.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
@@ -1043,7 +1133,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                   </table>
                   {reportData.sjComparison && (
                     <p className="comparison-note">
-                      Compared against {reportData.sjComparison.summary.totalTests} professional baseball players from MLB/MiLB
+                      Compared against professional baseball players from MLB/MiLB
                     </p>
                   )}
                 </div>
@@ -1054,6 +1144,15 @@ const ReportViewer = ({ athlete, selectedTests }) => {
             {reportData.tests?.squatJump && reportData.sjComparison && (
               <div className="spider-chart-section">
                 <h3>Performance Comparison</h3>
+
+                {/* Metric Selector */}
+                <MetricSelector
+                  testType="squatJump"
+                  availableMetrics={getAvailableMetrics('squatJump')}
+                  selectedMetrics={selectedMetrics.squatJump}
+                  onMetricsChange={(newMetrics) => handleMetricsChange('squatJump', newMetrics)}
+                />
+
                 <div className="spider-chart-container">
                   {getSJSpiderChartData() && (
                     <Radar data={getSJSpiderChartData()} options={getSJChartOptions()} />
@@ -1101,7 +1200,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                       </tr>
                       <tr>
                         <td>Jump Height</td>
-                        <td>{reportData.hopComparison.metrics.jumpHeight?.value?.toFixed(2) || 'N/A'} cm</td>
+                        <td>{reportData.hopComparison.metrics.jumpHeight?.value?.toFixed(2) || 'N/A'} in</td>
                         <td>{reportData.hopComparison.metrics.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
@@ -1113,7 +1212,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                   </table>
                   {reportData.hopComparison && (
                     <p className="comparison-note">
-                      Compared against {reportData.hopComparison.totalProTests} professional baseball players from MLB/MiLB
+                      Compared against professional baseball players from MLB/MiLB
                     </p>
                   )}
                 </div>
@@ -1128,6 +1227,15 @@ const ReportViewer = ({ athlete, selectedTests }) => {
             {reportData.tests?.hopTest && reportData.hopComparison && (
               <div className="spider-chart-section">
                 <h3>Performance Comparison</h3>
+
+                {/* Metric Selector */}
+                <MetricSelector
+                  testType="hopTest"
+                  availableMetrics={getAvailableMetrics('hopTest')}
+                  selectedMetrics={selectedMetrics.hopTest}
+                  onMetricsChange={(newMetrics) => handleMetricsChange('hopTest', newMetrics)}
+                />
+
                 <div className="spider-chart-container">
                   {getHopTestSpiderChartData() && (
                     <Radar data={getHopTestSpiderChartData()} options={getHopTestChartOptions()} />
@@ -1190,8 +1298,8 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                     <tbody>
                       <tr>
                         <td>Jump Height</td>
-                        <td>{leftData?.jumpHeight ? `${leftData.jumpHeight.toFixed(2)} cm` : 'N/A'}</td>
-                        <td>{rightData?.jumpHeight ? `${rightData.jumpHeight.toFixed(2)} cm` : 'N/A'}</td>
+                        <td>{leftData?.jumpHeight ? `${(leftData.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
+                        <td>{rightData?.jumpHeight ? `${(rightData.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
                         <td style={{
                           color: calculateAsymmetry(leftData?.jumpHeight, rightData?.jumpHeight).color,
                           fontWeight: '600'
@@ -1266,14 +1374,14 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                         </td>
                       </tr>
                       <tr>
-                        <td>RSI-mod</td>
-                        <td>{leftData?.rsiMod ? leftData.rsiMod.toFixed(3) : 'N/A'}</td>
-                        <td>{rightData?.rsiMod ? rightData.rsiMod.toFixed(3) : 'N/A'}</td>
+                        <td>RSI</td>
+                        <td>{leftData?.rsi ? leftData.rsi.toFixed(3) : 'N/A'}</td>
+                        <td>{rightData?.rsi ? rightData.rsi.toFixed(3) : 'N/A'}</td>
                         <td style={{
-                          color: calculateAsymmetry(leftData?.rsiMod, rightData?.rsiMod).color,
+                          color: calculateAsymmetry(leftData?.rsi, rightData?.rsi).color,
                           fontWeight: '600'
                         }}>
-                          {calculateAsymmetry(leftData?.rsiMod, rightData?.rsiMod).percentage}
+                          {calculateAsymmetry(leftData?.rsi, rightData?.rsi).percentage}
                         </td>
                       </tr>
                       <tr>
@@ -1361,7 +1469,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                   </table>
                   {reportData.imtpComparison && (
                     <p className="comparison-note">
-                      Compared against {reportData.imtpComparison.summary.totalTests} professional baseball players from MLB/MiLB
+                      Compared against professional baseball players from MLB/MiLB
                     </p>
                   )}
                 </div>
@@ -1372,6 +1480,15 @@ const ReportViewer = ({ athlete, selectedTests }) => {
             {reportData.tests?.imtp && reportData.imtpComparison && (
               <div className="spider-chart-section">
                 <h3>Performance Comparison</h3>
+
+                {/* Metric Selector */}
+                <MetricSelector
+                  testType="imtp"
+                  availableMetrics={getAvailableMetrics('imtp')}
+                  selectedMetrics={selectedMetrics.imtp}
+                  onMetricsChange={(newMetrics) => handleMetricsChange('imtp', newMetrics)}
+                />
+
                 <div className="spider-chart-container">
                   {getIMTPSpiderChartData() && (
                     <Radar data={getIMTPSpiderChartData()} options={getIMTPChartOptions()} />
@@ -1414,7 +1531,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                     <tbody>
                       <tr>
                         <td>Pushup Height</td>
-                        <td>{reportData.tests.ppu.pushupHeight?.toFixed(2) || 'N/A'} cm</td>
+                        <td>{reportData.ppuComparison?.metrics?.pushupHeight?.value?.toFixed(2) || 'N/A'} in</td>
                         <td>{reportData.ppuComparison?.metrics?.pushupHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
@@ -1446,7 +1563,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                   </table>
                   {reportData.ppuComparison?.summary?.totalTests && (
                     <p className="comparison-note">
-                      Compared against {reportData.ppuComparison.summary.totalTests} professional baseball players from MLB/MiLB
+                      Compared against professional baseball players from MLB/MiLB
                     </p>
                   )}
                 </div>
@@ -1457,6 +1574,15 @@ const ReportViewer = ({ athlete, selectedTests }) => {
             {reportData.tests?.ppu && reportData.ppuComparison && (
               <div className="spider-chart-section">
                 <h3>Performance Comparison</h3>
+
+                {/* Metric Selector */}
+                <MetricSelector
+                  testType="ppu"
+                  availableMetrics={getAvailableMetrics('ppu')}
+                  selectedMetrics={selectedMetrics.ppu}
+                  onMetricsChange={(newMetrics) => handleMetricsChange('ppu', newMetrics)}
+                />
+
                 <div className="spider-chart-container">
                   {getPPUSpiderChartData() && (
                     <Radar data={getPPUSpiderChartData()} options={getPPUChartOptions()} />
@@ -1598,6 +1724,51 @@ const ReportViewer = ({ athlete, selectedTests }) => {
           {saving ? 'Generating PDF...' : 'Download PDF Report'}
         </button>
       </div>
+
+      {/* PDF Generation Progress Modal */}
+      {saving && (
+        <div className="pdf-generation-modal">
+          <div className="pdf-generation-content">
+            <div className="pdf-generation-header">
+              <h3>Generating Performance Report</h3>
+              <p>Please wait while we create your PDF...</p>
+            </div>
+
+            <div className="progress-bar-container">
+              <div className="progress-bar">
+                <div
+                  className="progress-bar-fill"
+                  style={{ width: `${generatingProgress}%` }}
+                ></div>
+              </div>
+              <div className="progress-percentage">{generatingProgress}%</div>
+            </div>
+
+            <div className="progress-steps">
+              <div className={`progress-step ${generatingProgress >= 20 ? 'completed' : ''}`}>
+                <div className="step-icon">✓</div>
+                <div className="step-text">Collecting data</div>
+              </div>
+              <div className={`progress-step ${generatingProgress >= 40 ? 'completed' : ''}`}>
+                <div className="step-icon">✓</div>
+                <div className="step-text">Generating charts</div>
+              </div>
+              <div className={`progress-step ${generatingProgress >= 60 ? 'completed' : ''}`}>
+                <div className="step-icon">✓</div>
+                <div className="step-text">Creating layout</div>
+              </div>
+              <div className={`progress-step ${generatingProgress >= 80 ? 'completed' : ''}`}>
+                <div className="step-icon">✓</div>
+                <div className="step-text">Rendering PDF</div>
+              </div>
+              <div className={`progress-step ${generatingProgress === 100 ? 'completed' : ''}`}>
+                <div className="step-icon">✓</div>
+                <div className="step-text">Complete</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

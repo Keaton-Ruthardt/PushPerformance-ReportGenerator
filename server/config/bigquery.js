@@ -9,10 +9,28 @@ const __dirname = dirname(__filename);
 dotenv.config();
 
 // Initialize BigQuery client
-const bigquery = new BigQuery({
-  projectId: process.env.BIGQUERY_PROJECT_ID || 'vald-ref-data-copy',
-  keyFilename: join(__dirname, '..', '..', process.env.BIGQUERY_KEYFILE || 'vald-ref-data-copy-0c0792ad4944.json')
-});
+// In production, use BIGQUERY_CREDENTIALS environment variable
+// In development, use keyFilename
+let bigQueryConfig = {
+  projectId: process.env.BIGQUERY_PROJECT_ID || 'vald-ref-data-copy'
+};
+
+if (process.env.BIGQUERY_CREDENTIALS) {
+  // Production: Parse credentials from environment variable
+  try {
+    bigQueryConfig.credentials = JSON.parse(process.env.BIGQUERY_CREDENTIALS);
+    console.log('✅ Using BigQuery credentials from environment variable');
+  } catch (error) {
+    console.error('❌ Failed to parse BIGQUERY_CREDENTIALS:', error.message);
+    throw new Error('Invalid BIGQUERY_CREDENTIALS format');
+  }
+} else {
+  // Development: Use credentials file
+  bigQueryConfig.keyFilename = join(__dirname, '..', '..', process.env.BIGQUERY_KEYFILE || 'vald-ref-data-copy-0c0792ad4944.json');
+  console.log('ℹ️  Using BigQuery credentials from file (development mode)');
+}
+
+const bigquery = new BigQuery(bigQueryConfig);
 
 const dataset = process.env.BIGQUERY_DATASET || 'VALDrefDataCOPY';
 

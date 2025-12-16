@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -220,10 +221,15 @@ class VALDApiService {
         console.log('❌ Primary /groups failed:', e.response?.status, e.message);
       }
 
-      // Step 2: Use ALL groups (not just pro groups)
-      const allGroups = groupsData;
+      // Step 2: Filter to only professional groups
+      const proGroupNames = ['MiLB/MLB', 'Pro', 'MLB', 'MiLB', 'Professional', 'Major', 'MLB/ MiLB', 'Pro Baseball'];
+      const allGroups = groupsData.filter(group => {
+        return proGroupNames.some(proName =>
+          group.name && group.name.toLowerCase().includes(proName.toLowerCase())
+        );
+      });
 
-      console.log(`🎯 Primary: Found ${allGroups.length} total groups:`, allGroups.map(g => g.name));
+      console.log(`🎯 Primary: Filtered to ${allGroups.length} professional groups (from ${groupsData.length} total):`, allGroups.map(g => g.name));
 
       // Step 3: Get profiles for each group
       for (const group of allGroups) {
@@ -316,10 +322,15 @@ class VALDApiService {
             console.log('❌ Secondary /groups failed:', e.response?.status, e.message);
           }
 
-          // Step 2: Use ALL groups (not just pro groups)
-          const allGroups2 = groupsData2;
+          // Step 2: Filter to only professional groups
+          const proGroupNames = ['MiLB/MLB', 'Pro', 'MLB', 'MiLB', 'Professional', 'Major', 'MLB/ MiLB', 'Pro Baseball'];
+          const allGroups2 = groupsData2.filter(group => {
+            return proGroupNames.some(proName =>
+              group.name && group.name.toLowerCase().includes(proName.toLowerCase())
+            );
+          });
 
-          console.log(`🎯 Secondary: Found ${allGroups2.length} total groups:`, allGroups2.map(g => g.name));
+          console.log(`🎯 Secondary: Filtered to ${allGroups2.length} professional groups (from ${groupsData2.length} total):`, allGroups2.map(g => g.name));
 
           // Step 3: Get profiles for each group
           for (const group of allGroups2) {
@@ -764,6 +775,43 @@ class VALDApiService {
       console.log(`📊 Extracted ${Object.keys(metrics).length} metrics from trials`);
       console.log(`📊 Sample metrics:`, Object.keys(metrics).slice(0, 5));
 
+      // DEBUG: Log RSI fields to file for easier debugging
+      const logPath = path.join(__dirname, '..', '..', 'rsi-debug.log');
+      let logMessage = '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+      logMessage += `🔍 RSI FIELD DETECTION - TEST ID: ${testId}\n`;
+      logMessage += `Test Type: ${testObj.testType || 'Unknown'}\n`;
+      logMessage += `Time: ${new Date().toISOString()}\n\n`;
+
+      const allFieldNames = Object.keys(metrics);
+      const rsiRelatedFields = allFieldNames.filter(key =>
+        key.includes('FLIGHT') ||
+        key.includes('CONTRACTION') ||
+        key.includes('RATIO') ||
+        key.includes('RSI')
+      );
+
+      if (rsiRelatedFields.length > 0) {
+        logMessage += `✅ RSI-RELATED FIELDS FOUND: ${rsiRelatedFields.length}\n`;
+        rsiRelatedFields.forEach(field => {
+          logMessage += `   📊 ${field} = ${metrics[field]}\n`;
+        });
+      } else {
+        logMessage += '❌ NO RSI-RELATED FIELDS FOUND\n';
+        logMessage += `📋 First 20 available fields:\n`;
+        allFieldNames.slice(0, 20).forEach(field => {
+          logMessage += `   - ${field}\n`;
+        });
+      }
+      logMessage += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+
+      // Write to log file
+      try {
+        fs.appendFileSync(logPath, logMessage);
+        console.log('📝 RSI field info written to rsi-debug.log');
+      } catch (err) {
+        console.error('Error writing to RSI debug log:', err);
+      }
+
       // Add BigQuery field name aliases for fields that don't match
       // VALD API uses different naming than BigQuery database
       const bigQueryAliases = {};
@@ -774,6 +822,87 @@ class VALDApiService {
       }
       if (metrics['RSI_MODIFIED_Trial_RSIModified']) {
         bigQueryAliases['RSI_MODIFIED_Trial_RSI_mod'] = metrics['RSI_MODIFIED_Trial_RSIModified'];
+      }
+
+      // Map standard RSI (FLIGHT_CONTRACTION_TIME_RATIO) with comprehensive field name matching
+      // Try all possible RSI field name variations from VALD API
+      const rsiFieldVariations = [
+        'FLIGHT_CONTRACTION_TIME_RATIO_Trial_No_Unit',  // ACTUAL field name from VALD API
+        'FLIGHT_CONTRACTION_TIME_RATIO_Trial_',
+        'FLIGHT_CONTRACTION_TIME_RATIO_Trial',
+        'FLIGHT__CONTRACTION_TIME_RATIO_Trial_',  // Double underscore variation
+        'FLIGHT__CONTRACTION_TIME_RATIO_Trial',
+        'RSI_Trial_',
+        'RSI_Trial',
+        'CMJ_RSI_Trial_',
+        'CMJ_RSI_Trial',
+        'SLJ_RSI_Trial_',  // For Single Leg Jump
+        'SLJ_RSI_Trial',
+        'SLJ_RSI_Left_',   // For Single Leg Jump Left
+        'SLJ_RSI_Left',
+        'SLJ_RSI_Right_',  // For Single Leg Jump Right
+        'SLJ_RSI_Right'
+      ];
+
+      let rsiFound = false;
+      for (const fieldName of rsiFieldVariations) {
+        if (metrics[fieldName] !== undefined && metrics[fieldName] !== null) {
+          bigQueryAliases['FLIGHT_CONTRACTION_TIME_RATIO_Trial_'] = metrics[fieldName];
+          console.log(`✅ Found RSI field "${fieldName}":`, metrics[fieldName]);
+          rsiFound = true;
+          break;
+        }
+      }
+
+      if (!rsiFound) {
+        console.log('⚠️  Standard RSI field not found. Tried:', rsiFieldVariations.join(', '));
+        console.log('📋 Available metrics that might be RSI:',
+          Object.keys(metrics).filter(k => k.includes('RSI') || k.includes('FLIGHT') || k.includes('CONTRACTION') || k.includes('RATIO'))
+        );
+      }
+
+      // Handle limb-specific RSI fields for Single Leg CMJ
+      // These need to be mapped to FLIGHT_CONTRACTION_TIME_RATIO_Left_ and FLIGHT_CONTRACTION_TIME_RATIO_Right_
+      const leftRsiVariations = [
+        'FLIGHT_CONTRACTION_TIME_RATIO_Left_No_Unit',  // Likely actual field name
+        'FLIGHT_CONTRACTION_TIME_RATIO_Left_',
+        'FLIGHT_CONTRACTION_TIME_RATIO_Left',
+        'FLIGHT__CONTRACTION_TIME_RATIO_Left_',
+        'FLIGHT__CONTRACTION_TIME_RATIO_Left',
+        'RSI_Left_',
+        'RSI_Left',
+        'SLJ_RSI_Left_',
+        'SLJ_RSI_Left'
+      ];
+
+      const rightRsiVariations = [
+        'FLIGHT_CONTRACTION_TIME_RATIO_Right_No_Unit',  // Likely actual field name
+        'FLIGHT_CONTRACTION_TIME_RATIO_Right_',
+        'FLIGHT_CONTRACTION_TIME_RATIO_Right',
+        'FLIGHT__CONTRACTION_TIME_RATIO_Right_',
+        'FLIGHT__CONTRACTION_TIME_RATIO_Right',
+        'RSI_Right_',
+        'RSI_Right',
+        'SLJ_RSI_Right_',
+        'SLJ_RSI_Right'
+      ];
+
+      // Check for Left limb RSI
+      for (const fieldName of leftRsiVariations) {
+        if (metrics[fieldName] !== undefined && metrics[fieldName] !== null) {
+          bigQueryAliases['FLIGHT_CONTRACTION_TIME_RATIO_Left_'] = metrics[fieldName];
+          console.log(`✅ Found Left RSI field "${fieldName}":`, metrics[fieldName]);
+          break;
+        }
+      }
+
+      // Check for Right limb RSI
+      for (const fieldName of rightRsiVariations) {
+        if (metrics[fieldName] !== undefined && metrics[fieldName] !== null) {
+          bigQueryAliases['FLIGHT_CONTRACTION_TIME_RATIO_Right_'] = metrics[fieldName];
+          console.log(`✅ Found Right RSI field "${fieldName}":`, metrics[fieldName]);
+          break;
+        }
       }
 
       // Merge the metrics with the original test metadata

@@ -119,7 +119,7 @@ function generateSingleLegCMJRecommendations(leftData, rightData) {
     { name: 'Concentric Peak Force', left: leftData.concentricPeakForce, right: rightData.concentricPeakForce },
     { name: 'Peak Power', left: leftData.peakPower, right: rightData.peakPower },
     { name: 'Peak Power / BM', left: leftData.peakPowerPerBM, right: rightData.peakPowerPerBM },
-    { name: 'RSI-mod', left: leftData.rsiMod, right: rightData.rsiMod }
+    { name: 'RSI', left: leftData.rsi, right: rightData.rsi }  // Standard RSI (changed from RSI-mod)
   ];
 
   let highestAsymmetry = 0;
@@ -298,7 +298,7 @@ router.post('/generate', async (req, res) => {
           eccentricPeakPowerBM: cmjTest.BODYMASS_RELATIVE_ECCENTRIC_PEAK_POWER_Trial_W_per_kg,
           peakPower: cmjTest.PEAK_TAKEOFF_POWER_Trial_W,
           peakPowerBM: cmjTest.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg,
-          rsiMod: cmjTest.RSI_MODIFIED_Trial_RSI_mod || cmjTest.RSI_MODIFIED_IMP_MOM_Trial_RSI_mod,
+          rsi: cmjTest.FLIGHT_CONTRACTION_TIME_RATIO_Trial_,  // Standard RSI (changed from RSI-modified)
           countermovementDepth: cmjTest.COUNTERMOVEMENT_DEPTH_Trial_cm
         };
 
@@ -307,11 +307,9 @@ router.post('/generate', async (req, res) => {
           eccentricBrakingRFD: cmjMetrics.eccentricBrakingRFD,
           forceAtZeroVelocity: cmjMetrics.forceAtZeroVelocity
         });
-        console.log('📊 RSI-MOD EXTRACTION:', {
-          rsiMod: cmjMetrics.rsiMod,
-          rawValue1: cmjTest.RSI_MODIFIED_Trial_RSI_mod,
-          rawValue2: cmjTest.RSI_MODIFIED_IMP_MOM_Trial_RSI_mod,
-          rawValue3: cmjTest.RSI_MODIFIED_Trial_RSIModified
+        console.log('📊 Standard RSI EXTRACTION:', {
+          rsi: cmjMetrics.rsi,
+          rawValue: cmjTest.FLIGHT_CONTRACTION_TIME_RATIO_Trial_
         });
 
         cmjComparison = await getComparativeAnalysis(cmjMetrics);
@@ -474,7 +472,13 @@ router.post('/generate', async (req, res) => {
         concentricPeakForce: valdData.forceDecks.singleLegCMJ_Left.CONCENTRIC_PEAK_FORCE_Trial_N || valdData.forceDecks.singleLegCMJ_Left.PEAK_TAKEOFF_FORCE_Trial_N,
         peakPower: valdData.forceDecks.singleLegCMJ_Left.PEAK_TAKEOFF_POWER_Trial_W || valdData.forceDecks.singleLegCMJ_Left.PEAK_POWER_Trial_W,
         peakPowerPerBM: valdData.forceDecks.singleLegCMJ_Left.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg || valdData.forceDecks.singleLegCMJ_Left.BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg,
-        rsiMod: valdData.forceDecks.singleLegCMJ_Left.RSI_MODIFIED_Trial_RSI_mod || valdData.forceDecks.singleLegCMJ_Left.RSI_MODIFIED_IMP_MOM_Trial_RSI_mod
+        // Try multiple field name variations for RSI
+        rsi: valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Left_No_Unit ||
+             valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Trial_No_Unit ||
+             valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Left_ ||
+             valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Trial_ ||
+             valdData.forceDecks.singleLegCMJ_Left.RSI_Left_ ||
+             valdData.forceDecks.singleLegCMJ_Left.RSI_Trial_
       };
 
       const rightData = {
@@ -484,7 +488,13 @@ router.post('/generate', async (req, res) => {
         concentricPeakForce: valdData.forceDecks.singleLegCMJ_Right.CONCENTRIC_PEAK_FORCE_Trial_N || valdData.forceDecks.singleLegCMJ_Right.PEAK_TAKEOFF_FORCE_Trial_N,
         peakPower: valdData.forceDecks.singleLegCMJ_Right.PEAK_TAKEOFF_POWER_Trial_W || valdData.forceDecks.singleLegCMJ_Right.PEAK_POWER_Trial_W,
         peakPowerPerBM: valdData.forceDecks.singleLegCMJ_Right.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg || valdData.forceDecks.singleLegCMJ_Right.BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg,
-        rsiMod: valdData.forceDecks.singleLegCMJ_Right.RSI_MODIFIED_Trial_RSI_mod || valdData.forceDecks.singleLegCMJ_Right.RSI_MODIFIED_IMP_MOM_Trial_RSI_mod
+        // Try multiple field name variations for RSI
+        rsi: valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Right_No_Unit ||
+             valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Trial_No_Unit ||
+             valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Right_ ||
+             valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Trial_ ||
+             valdData.forceDecks.singleLegCMJ_Right.RSI_Right_ ||
+             valdData.forceDecks.singleLegCMJ_Right.RSI_Trial_
       };
 
       slCmjRecommendations = generateSingleLegCMJRecommendations(leftData, rightData);
@@ -516,7 +526,7 @@ router.post('/generate', async (req, res) => {
           jumpHeight: cmToInches(valdData.forceDecks.cmj.JUMP_HEIGHT_IMP_MOM_Trial_cm),
           peakPower: valdData.forceDecks.cmj.PEAK_TAKEOFF_POWER_Trial_W,
           peakPowerBM: valdData.forceDecks.cmj.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg,
-          rsiMod: valdData.forceDecks.cmj.RSI_MODIFIED_Trial_RSI_mod || valdData.forceDecks.cmj.RSI_MODIFIED_IMP_MOM_Trial_RSI_mod,
+          rsi: valdData.forceDecks.cmj.FLIGHT_CONTRACTION_TIME_RATIO_Trial_,  // Standard RSI (changed from RSI-modified)
           // Add all 13 metrics for detailed display
           eccentricBrakingRFD: valdData.forceDecks.cmj.ECCENTRIC_BRAKING_RFD_Trial_N_per_s,
           forceAtZeroVelocity: valdData.forceDecks.cmj.FORCE_AT_ZERO_VELOCITY_Trial_N,
@@ -570,7 +580,13 @@ router.post('/generate', async (req, res) => {
           eccentricPeakVelocity: valdData.forceDecks.singleLegCMJ_Left.ECCENTRIC_PEAK_VELOCITY_Trial_m_Per_s || valdData.forceDecks.singleLegCMJ_Left.ECCENTRIC_PEAK_VELOCITY_Trial_m_per_s,
           concentricPeakVelocity: valdData.forceDecks.singleLegCMJ_Left.PEAK_TAKEOFF_VELOCITY_Trial_m_Per_s || valdData.forceDecks.singleLegCMJ_Left.CONCENTRIC_PEAK_VELOCITY_Trial_m_per_s || valdData.forceDecks.singleLegCMJ_Left.PEAK_TAKEOFF_VELOCITY_Trial_m_per_s,
           peakPowerBM: valdData.forceDecks.singleLegCMJ_Left.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_Per_kg || valdData.forceDecks.singleLegCMJ_Left.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg || valdData.forceDecks.singleLegCMJ_Left.BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg,
-          rsiMod: valdData.forceDecks.singleLegCMJ_Left.RSI_MODIFIED_Trial_RSIModified || valdData.forceDecks.singleLegCMJ_Left.RSI_MODIFIED_IMP_MOM_Trial_RSIModified || valdData.forceDecks.singleLegCMJ_Left.RSI_MODIFIED_Trial_RSI_mod,
+          // Try multiple field name variations for RSI
+          rsi: valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Left_No_Unit ||
+               valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Trial_No_Unit ||
+               valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Left_ ||
+               valdData.forceDecks.singleLegCMJ_Left.FLIGHT_CONTRACTION_TIME_RATIO_Trial_ ||
+               valdData.forceDecks.singleLegCMJ_Left.RSI_Left_ ||
+               valdData.forceDecks.singleLegCMJ_Left.RSI_Trial_,
           peakPower: valdData.forceDecks.singleLegCMJ_Left.PEAK_TAKEOFF_POWER_Trial_W || valdData.forceDecks.singleLegCMJ_Left.PEAK_POWER_Trial_W
         } : null,
         singleLegCMJ_Right: valdData.forceDecks?.singleLegCMJ_Right ? {
@@ -581,7 +597,13 @@ router.post('/generate', async (req, res) => {
           eccentricPeakVelocity: valdData.forceDecks.singleLegCMJ_Right.ECCENTRIC_PEAK_VELOCITY_Trial_m_Per_s || valdData.forceDecks.singleLegCMJ_Right.ECCENTRIC_PEAK_VELOCITY_Trial_m_per_s,
           concentricPeakVelocity: valdData.forceDecks.singleLegCMJ_Right.PEAK_TAKEOFF_VELOCITY_Trial_m_Per_s || valdData.forceDecks.singleLegCMJ_Right.CONCENTRIC_PEAK_VELOCITY_Trial_m_per_s || valdData.forceDecks.singleLegCMJ_Right.PEAK_TAKEOFF_VELOCITY_Trial_m_per_s,
           peakPowerBM: valdData.forceDecks.singleLegCMJ_Right.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_Per_kg || valdData.forceDecks.singleLegCMJ_Right.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg || valdData.forceDecks.singleLegCMJ_Right.BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg,
-          rsiMod: valdData.forceDecks.singleLegCMJ_Right.RSI_MODIFIED_Trial_RSIModified || valdData.forceDecks.singleLegCMJ_Right.RSI_MODIFIED_IMP_MOM_Trial_RSIModified || valdData.forceDecks.singleLegCMJ_Right.RSI_MODIFIED_Trial_RSI_mod,
+          // Try multiple field name variations for RSI
+          rsi: valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Right_No_Unit ||
+               valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Trial_No_Unit ||
+               valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Right_ ||
+               valdData.forceDecks.singleLegCMJ_Right.FLIGHT_CONTRACTION_TIME_RATIO_Trial_ ||
+               valdData.forceDecks.singleLegCMJ_Right.RSI_Right_ ||
+               valdData.forceDecks.singleLegCMJ_Right.RSI_Trial_,
           peakPower: valdData.forceDecks.singleLegCMJ_Right.PEAK_TAKEOFF_POWER_Trial_W || valdData.forceDecks.singleLegCMJ_Right.PEAK_POWER_Trial_W
         } : null
       },
@@ -855,7 +877,7 @@ router.post('/generate-cmj-pdf', async (req, res) => {
       eccentricPeakPowerBM: cmjTest.BODYMASS_RELATIVE_ECCENTRIC_PEAK_POWER_Trial_W_per_kg,
       peakPower: cmjTest.PEAK_TAKEOFF_POWER_Trial_W,
       peakPowerBM: cmjTest.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg,
-      rsiMod: cmjTest.RSI_MODIFIED_Trial_RSI_mod || cmjTest.RSI_MODIFIED_IMP_MOM_Trial_RSI_mod,
+      rsi: cmjTest.FLIGHT_CONTRACTION_TIME_RATIO_Trial_,  // Standard RSI (changed from RSI-modified)
       countermovementDepth: cmjTest.COUNTERMOVEMENT_DEPTH_Trial_cm
     };
 

@@ -28,13 +28,16 @@ class RateLimiter {
   }
 }
 
-const rateLimiter = new RateLimiter(20, 5000); // 20 calls per 5 seconds (conservative)
+const rateLimiter = new RateLimiter(10, 5000); // 10 calls per 5 seconds (very conservative to avoid 403/404)
 
 async function calculateHopMetrics(testId, apiSource) {
   try {
     await rateLimiter.waitIfNeeded();
 
-    const token = await valdApiService.getAccessToken();
+    // Get the correct token for the API source
+    const token = apiSource === 'Secondary'
+      ? await valdApiService.getAccessToken2()
+      : await valdApiService.getAccessToken();
     const config = apiSource === 'Secondary' ? valdApiService.config2 : valdApiService.config;
 
     const response = await axios.get(
@@ -56,22 +59,32 @@ async function calculateHopMetrics(testId, apiSource) {
       return { jumpHeight: null, gct: null, rsi: null };
     }
 
-    // Extract individual hop values
+    // Debug: log available fields for first successful test
+    if (!calculateHopMetrics.hasLoggedFields) {
+      const availableFields = [...new Set(trial.results.map(r => r.definition?.result))];
+      console.log(`\n  📋 Available VALD fields in hop test trials:`);
+      console.log(`     ${availableFields.filter(f => f && f.includes('HOP')).join(', ')}\n`);
+      calculateHopMetrics.hasLoggedFields = true;
+    }
+
+    // Extract individual hop values (filter by limb === 'Trial' to get individual jumps, not summary stats)
+    // This MUST match the web UI logic exactly (reportRoutes.js:61-67)
     const jumpHeightValues = trial.results
-      .filter(r => r.definition?.result === 'HOP_JUMP_HEIGHT')
+      .filter(r => r.definition?.result === 'HOP_JUMP_HEIGHT' && r.limb === 'Trial')
       .map(r => r.value)
       .filter(v => v != null)
       .sort((a, b) => b - a); // Descending (higher is better)
 
     const gctValues = trial.results
-      .filter(r => r.definition?.result === 'HOP_CONTACT_TIME')
+      .filter(r => r.definition?.result === 'HOP_CONTACT_TIME' && r.limb === 'Trial')
       .map(r => r.value)
       .filter(v => v != null)
       .sort((a, b) => a - b); // Ascending (lower is better)
 
-    // Extract regular RSI values (flight time / ground contact time ratio)
+    // Extract regular HOP_RSI values (standard RSI = flight time / ground contact time ratio)
+    // NOT HOP_RSI_MODIFIED!
     const rsiValues = trial.results
-      .filter(r => r.definition?.result === 'HOP_RSI')
+      .filter(r => r.definition?.result === 'HOP_RSI' && r.limb === 'Trial')
       .map(r => r.value)
       .filter(v => v != null)
       .sort((a, b) => b - a); // Descending (higher is better)
@@ -91,40 +104,58 @@ async function calculateHopMetrics(testId, apiSource) {
       ? best5RSI.reduce((a, b) => a + b, 0) / best5RSI.length
       : null;
 
+    // Log raw values for debugging
+    if (avgRSI !== null) {
+      console.log(`     📊 Found ${rsiValues.length} RSI values, best 5: ${best5RSI.map(v => v.toFixed(2)).join(', ')}`);
+      console.log(`     📊 Avg RSI: ${avgRSI.toFixed(2)}`);
+    }
+
     return {
       jumpHeight: avgJH,
       gct: avgGCT,
       rsi: avgRSI
     };
   } catch (error) {
-    console.error(`  ❌ Error fetching trials for ${testId}: ${error.message}`);
+    // Only log non-404 errors (404 means test doesn't exist in this API)
+    if (error.response?.status !== 404) {
+      console.error(`  ❌ Error fetching trials for ${testId}: ${error.message}`);
+    }
     return { jumpHeight: null, gct: null, rsi: null };
   }
 }
 
 async function populateHopMetrics() {
   try {
-    console.log('🔄 Populating Hop Test metrics in BigQuery...\n');
+    console.log('🔄 RE-POPULATING ALL Hop Test metrics in BigQuery...\n');
+    console.log('⚠️  This will overwrite existing data to ensure correct RSI values\n');
 
-    // Authenticate with VALD
-    await valdApiService.authenticate();
-    console.log('✅ VALD authentication successful\n');
+    // Authenticate with VALD (try primary, fall back to secondary only if primary fails)
+    try {
+      await valdApiService.authenticate();
+      console.log('✅ VALD Primary authentication successful\n');
+    } catch (error) {
+      console.log('⚠️  Primary VALD API unavailable, will use Secondary API only\n');
+    }
 
-    // Get all hop tests from BigQuery
+    // Get ALL hop tests from BigQuery (including those with existing data)
+    // Filter to Pro/MLB athletes only
     const queryStr = `
-      SELECT test_id, full_name, test_date
+      SELECT test_id, full_name, test_date,
+             hop_rsi_avg_best_5 as existing_rsi,
+             hop_gct_avg_best_5 as existing_gct,
+             hop_jump_height_avg_best_5 as existing_jh
       FROM \`${datasetName}.hj_results\`
-      WHERE hop_jump_height_avg_best_5 IS NULL
-         OR hop_gct_avg_best_5 IS NULL
-         OR hop_rsi_avg_best_5 IS NULL
+      WHERE (group_name_1 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+             group_name_2 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+             group_name_3 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball'))
       ORDER BY test_date DESC
     `;
 
     const tests = await query(queryStr);
-    console.log(`📊 Found ${tests.length} hop tests to process\n`);
+    console.log(`📊 Found ${tests.length} pro athlete hop tests to process\n`);
 
     if (tests.length === 0) {
-      console.log('✅ All tests already have metrics calculated!');
+      console.log('⚠️  No pro athlete hop tests found!');
       process.exit(0);
     }
 
@@ -191,6 +222,107 @@ async function populateHopMetrics() {
     console.log(`   Total processed: ${processed}`);
     console.log(`   Successfully updated: ${updated}`);
     console.log(`   Failed: ${failed}`);
+
+    // Step 2: Calculate statistics and identify outliers
+    console.log('\n\n🔍 Step 2: Identifying and removing outliers (>3 SD from mean)...\n');
+
+    const statsQuery = `
+      SELECT
+        AVG(hop_rsi_avg_best_5) as rsi_mean,
+        STDDEV(hop_rsi_avg_best_5) as rsi_stddev,
+        AVG(hop_gct_avg_best_5) as gct_mean,
+        STDDEV(hop_gct_avg_best_5) as gct_stddev,
+        AVG(hop_jump_height_avg_best_5) as jh_mean,
+        STDDEV(hop_jump_height_avg_best_5) as jh_stddev
+      FROM \`${datasetName}.hj_results\`
+      WHERE (group_name_1 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+             group_name_2 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+             group_name_3 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball'))
+        AND hop_rsi_avg_best_5 IS NOT NULL
+        AND hop_gct_avg_best_5 IS NOT NULL
+        AND hop_jump_height_avg_best_5 IS NOT NULL
+    `;
+
+    const stats = await query(statsQuery);
+    const { rsi_mean, rsi_stddev, gct_mean, gct_stddev, jh_mean, jh_stddev } = stats[0];
+
+    console.log('📊 Current Statistics (before outlier removal):');
+    console.log(`   RSI: Mean = ${rsi_mean?.toFixed(3)}, StdDev = ${rsi_stddev?.toFixed(3)}`);
+    console.log(`   GCT: Mean = ${gct_mean?.toFixed(4)}s, StdDev = ${gct_stddev?.toFixed(4)}s`);
+    console.log(`   Jump Height: Mean = ${jh_mean?.toFixed(2)}cm, StdDev = ${jh_stddev?.toFixed(2)}cm\n`);
+
+    // Identify outliers (values >3 SD from mean)
+    const outliersQuery = `
+      SELECT test_id, full_name, test_date,
+             hop_rsi_avg_best_5 as rsi,
+             hop_gct_avg_best_5 as gct,
+             hop_jump_height_avg_best_5 as jh,
+             ABS(hop_rsi_avg_best_5 - ${rsi_mean}) / ${rsi_stddev} as rsi_z_score,
+             ABS(hop_gct_avg_best_5 - ${gct_mean}) / ${gct_stddev} as gct_z_score,
+             ABS(hop_jump_height_avg_best_5 - ${jh_mean}) / ${jh_stddev} as jh_z_score
+      FROM \`${datasetName}.hj_results\`
+      WHERE (group_name_1 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+             group_name_2 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+             group_name_3 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball'))
+        AND hop_rsi_avg_best_5 IS NOT NULL
+        AND hop_gct_avg_best_5 IS NOT NULL
+        AND hop_jump_height_avg_best_5 IS NOT NULL
+        AND (
+          ABS(hop_rsi_avg_best_5 - ${rsi_mean}) / ${rsi_stddev} > 3
+          OR ABS(hop_gct_avg_best_5 - ${gct_mean}) / ${gct_stddev} > 3
+          OR ABS(hop_jump_height_avg_best_5 - ${jh_mean}) / ${jh_stddev} > 3
+        )
+      ORDER BY test_date DESC
+    `;
+
+    const outliers = await query(outliersQuery);
+    console.log(`🚨 Found ${outliers.length} outliers (>3 SD from mean):\n`);
+
+    for (const outlier of outliers) {
+      console.log(`${outlier.full_name} - ${outlier.test_date.value}`);
+      if (outlier.rsi_z_score > 3) {
+        console.log(`  ⚠️  RSI: ${outlier.rsi?.toFixed(2)} (${outlier.rsi_z_score?.toFixed(1)} SD from mean)`);
+      }
+      if (outlier.gct_z_score > 3) {
+        console.log(`  ⚠️  GCT: ${outlier.gct?.toFixed(4)}s (${outlier.gct_z_score?.toFixed(1)} SD from mean)`);
+      }
+      if (outlier.jh_z_score > 3) {
+        console.log(`  ⚠️  Jump Height: ${outlier.jh?.toFixed(2)}cm (${outlier.jh_z_score?.toFixed(1)} SD from mean)`);
+      }
+    }
+
+    if (outliers.length > 0) {
+      console.log('\n🗑️  Removing outliers from HJ_result_updated table...\n');
+
+      // Delete outliers from the comparison table
+      const deleteQuery = `
+        DELETE FROM \`vald-ref-data-copy.${datasetName}.HJ_result_updated\`
+        WHERE (group_name_1 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+               group_name_2 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
+               group_name_3 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball'))
+          AND (
+            ABS(hop_rsi_avg_best_5 - ${rsi_mean}) / ${rsi_stddev} > 3
+            OR ABS(hop_gct_avg_best_5 - ${gct_mean}) / ${gct_stddev} > 3
+            OR ABS(hop_jump_height_avg_best_5 - ${jh_mean}) / ${jh_stddev} > 3
+          )
+      `;
+
+      await query(deleteQuery);
+      console.log(`✅ Removed ${outliers.length} outliers from comparison dataset\n`);
+    }
+
+    // Final statistics after outlier removal
+    const finalStats = await query(statsQuery);
+    const { rsi_mean: final_rsi_mean, rsi_stddev: final_rsi_stddev,
+            gct_mean: final_gct_mean, gct_stddev: final_gct_stddev,
+            jh_mean: final_jh_mean, jh_stddev: final_jh_stddev } = finalStats[0];
+
+    console.log('\n📊 Final Statistics (after outlier removal):');
+    console.log(`   RSI: Mean = ${final_rsi_mean?.toFixed(3)}, StdDev = ${final_rsi_stddev?.toFixed(3)}`);
+    console.log(`   GCT: Mean = ${final_gct_mean?.toFixed(4)}s, StdDev = ${final_gct_stddev?.toFixed(4)}s`);
+    console.log(`   Jump Height: Mean = ${final_jh_mean?.toFixed(2)}cm, StdDev = ${final_jh_stddev?.toFixed(2)}cm\n`);
+
+    console.log('\n✅ All done! Data is clean and ready for percentile calculations.\n');
 
     process.exit(0);
   } catch (error) {

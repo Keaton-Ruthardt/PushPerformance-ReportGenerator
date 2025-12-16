@@ -14,7 +14,7 @@ services:
     env: node
     region: oregon
     plan: starter
-    buildCommand: npm install
+    buildCommand: npm install && cd client && npm install && npm run build && cd ..
     startCommand: npm run server
     healthCheckPath: /health
     envVars:
@@ -22,6 +22,8 @@ services:
         value: production
       - key: PORT
         value: 5000
+
+      # Database Configuration (PostgreSQL - currently deprecated, using BigQuery)
       - key: DB_HOST
         fromDatabase:
           name: push-performance-db
@@ -42,17 +44,63 @@ services:
         fromDatabase:
           name: push-performance-db
           property: password
+
+      # JWT Authentication
       - key: JWT_SECRET
         generateValue: true
-      - key: VALD_API_URL
-        sync: false
-      - key: VALD_API_KEY
-        sync: false
-      - key: VALD_API_SECRET
-        sync: false
+
+      # Trainer Login Credentials
       - key: TRAINER_USERNAME
         value: pushtrainer
       - key: TRAINER_PASSWORD
-        sync: false
+        sync: false  # Set in Render dashboard
+
+      # VALD API Configuration (Legacy)
+      - key: VALD_API_URL
+        value: https://api.vald.com
+      - key: VALD_API_KEY
+        sync: false  # Set in dashboard
+      - key: VALD_API_SECRET
+        sync: false  # Set in dashboard
+
+      # VALD API v3.3 Configuration (Primary & Secondary)
+      - key: VALD_CLIENT_ID
+        sync: false  # Set in dashboard
+      - key: VALD_CLIENT_SECRET
+        sync: false  # Set in dashboard
+      - key: VALD_USERNAME
+        sync: false  # Set in dashboard
+      - key: VALD_PASSWORD
+        sync: false  # Set in dashboard
+      - key: VALD_PRIMARY_API
+        value: https://cloud.valdperformance.com/api/v3.3
+      - key: VALD_SECONDARY_API
+        value: https://valdperformance.com/api/v3.3
+      - key: VALD_PRIMARY_TOKEN
+        sync: false  # Set in dashboard
+      - key: VALD_SECONDARY_TOKEN
+        sync: false  # Set in dashboard
+
+      # BigQuery Configuration (REQUIRED for reports)
+      - key: BIGQUERY_PROJECT_ID
+        value: vald-ref-data-copy
+      - key: BIGQUERY_DATASET
+        value: VALDrefDataCOPY
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/bigquery-credentials.json
+
+      # Percentile Sync Schedule
       - key: PERCENTILE_SYNC_SCHEDULE
         value: "0 3 * * *"
+
+      # Puppeteer Configuration
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "false"
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium-browser
+
+    # Disk for Puppeteer cache
+    disk:
+      name: puppeteer-cache
+      mountPath: /opt/render/.cache
+      sizeGB: 1
