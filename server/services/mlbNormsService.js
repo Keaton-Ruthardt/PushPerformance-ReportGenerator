@@ -9,12 +9,39 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Initialize BigQuery client
-const bigquery = new BigQuery({
-  projectId: process.env.BIGQUERY_PROJECT_ID || 'vald-ref-data-copy',
-  keyFilename: join(__dirname, '..', '..', process.env.BIGQUERY_KEYFILE || 'vald-ref-data-copy-0c0792ad4944.json')
-});
+// Initialize BigQuery client with same logic as bigquery.js
+let bigQueryConfig = {
+  projectId: process.env.BIGQUERY_PROJECT_ID || 'vald-ref-data-copy'
+};
 
+if (process.env.BIGQUERY_CREDENTIALS_BASE64) {
+  // Production: Decode base64-encoded credentials
+  try {
+    const decoded = Buffer.from(process.env.BIGQUERY_CREDENTIALS_BASE64, 'base64').toString('utf8');
+    bigQueryConfig.credentials = JSON.parse(decoded);
+    console.log('✅ MLB Norms: Using BigQuery credentials from BIGQUERY_CREDENTIALS_BASE64');
+  } catch (error) {
+    console.error('❌ MLB Norms: Failed to decode BIGQUERY_CREDENTIALS_BASE64:', error.message);
+  }
+} else if (process.env.BIGQUERY_CREDENTIALS) {
+  // Production: Parse credentials from environment variable (JSON string)
+  try {
+    bigQueryConfig.credentials = JSON.parse(process.env.BIGQUERY_CREDENTIALS);
+    console.log('✅ MLB Norms: Using BigQuery credentials from BIGQUERY_CREDENTIALS');
+  } catch (error) {
+    console.error('❌ MLB Norms: Failed to parse BIGQUERY_CREDENTIALS:', error.message);
+  }
+} else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  // Production: Use credentials file path
+  bigQueryConfig.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  console.log('✅ MLB Norms: Using BigQuery credentials from file:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
+} else {
+  // Development: Use credentials file from BIGQUERY_KEYFILE or default
+  bigQueryConfig.keyFilename = join(__dirname, '..', '..', process.env.BIGQUERY_KEYFILE || 'vald-ref-data-copy-0c0792ad4944.json');
+  console.log('ℹ️  MLB Norms: Using BigQuery credentials from file (development mode)');
+}
+
+const bigquery = new BigQuery(bigQueryConfig);
 const dataset = process.env.BIGQUERY_DATASET || 'VALDrefDataCOPY';
 
 /**
