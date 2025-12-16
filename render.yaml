@@ -14,7 +14,12 @@ services:
     env: node
     region: oregon
     plan: starter
-    buildCommand: npm install && cd client && npm install && npm run build && cd ..
+    buildCommand: |
+      npm install
+      cd client
+      npm install
+      npm run build
+      cd ..
     startCommand: npm run server
     healthCheckPath: /health
     envVars:

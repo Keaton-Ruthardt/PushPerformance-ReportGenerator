@@ -45,8 +45,24 @@ app.use('/api/pdf', pdfRoutes);
 
 // Serve React static files in production
 if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../client/dist');
+  const indexPath = path.join(distPath, 'index.html');
+  const fs = require('fs');
+
+  // Check if build exists
+  if (!fs.existsSync(distPath)) {
+    console.error('❌ ERROR: Client build directory not found!');
+    console.error(`   Expected at: ${distPath}`);
+    console.error('   Make sure the build command ran successfully.');
+  } else if (!fs.existsSync(indexPath)) {
+    console.error('❌ ERROR: index.html not found in build!');
+    console.error(`   Expected at: ${indexPath}`);
+  } else {
+    console.log('✅ Client build found at:', distPath);
+  }
+
   // Serve static files from Vite build (dist folder)
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+  app.use(express.static(distPath));
 
   // Handle React routing - catch all non-API routes and serve index.html
   app.use((req, res, next) => {
@@ -54,8 +70,13 @@ if (process.env.NODE_ENV === 'production') {
     if (req.path.startsWith('/api')) {
       return next();
     }
-    // Serve index.html for all other routes (SPA routing)
-    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+
+    // Check if index.html exists before serving
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(500).send('Application build not found. Please contact administrator.');
+    }
   });
 } else {
   console.log('🔧 Running in development mode - React dev server should be running separately');
