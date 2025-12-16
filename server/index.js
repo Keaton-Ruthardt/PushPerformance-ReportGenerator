@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cron from 'node-cron';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 // import pool from './config/database.js'; // Deprecated - using BigQuery
 import { testConnection } from './config/bigquery.js';
 // import syncPercentiles from './scripts/syncPercentiles.js';
@@ -47,7 +48,6 @@ app.use('/api/pdf', pdfRoutes);
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '../client/dist');
   const indexPath = path.join(distPath, 'index.html');
-  const fs = require('fs');
 
   // Check if build exists
   if (!fs.existsSync(distPath)) {
