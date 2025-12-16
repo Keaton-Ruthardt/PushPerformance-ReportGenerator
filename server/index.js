@@ -48,8 +48,8 @@ if (process.env.NODE_ENV === 'production') {
   // Serve static files from Vite build (dist folder)
   app.use(express.static(path.join(__dirname, '../client/dist')));
 
-  // Handle React routing - return all requests to React app
-  app.get('*', (req, res) => {
+  // Handle React routing - return all requests to React app (Express v5 compatible)
+  app.get('/*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
   });
 } else {
