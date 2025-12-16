@@ -30,8 +30,8 @@ export async function generatePdfFromHtml(reportData, outputPath) {
   try {
     console.log('🚀 Launching headless browser for PDF generation...');
 
-    // Launch browser
-    browser = await puppeteer.launch({
+    // Launch browser with appropriate configuration for production vs development
+    const launchOptions = {
       headless: 'new',
       args: [
         '--no-sandbox',
@@ -39,7 +39,15 @@ export async function generatePdfFromHtml(reportData, outputPath) {
         '--disable-dev-shm-usage',
         '--disable-gpu'
       ]
-    });
+    };
+
+    // In production (Render), use system Chromium
+    if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log('📌 Using system Chromium at:', process.env.PUPPETEER_EXECUTABLE_PATH);
+    }
+
+    browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
 
