@@ -41,9 +41,3 @@ push-performance-app/
 └── README.md
 ```
 
-## Prerequisites
-
-- Node.js (v18 or higher)
-- PostgreSQL (v14 or higher)
-- VALD API credentials
-
