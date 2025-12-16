@@ -11,11 +11,10 @@ services:
   # Backend API Server
   - type: web
     name: push-performance-api
-    env: node
+    env: docker
     region: oregon
     plan: starter
-    buildCommand: npm install && npm run build
-    startCommand: npm run server
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
