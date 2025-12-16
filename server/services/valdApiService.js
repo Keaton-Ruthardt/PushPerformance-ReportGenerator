@@ -203,8 +203,10 @@ class VALDApiService {
       // Step 1: Get all groups for this tenant
       let groupsData = [];
       try {
+        const groupsUrl = `${this.config.tenantUrl}/groups`;
+        console.log('🔍 Calling groups API:', groupsUrl, 'with TenantId:', this.config.tenantId);
         const groupsResponse = await axios.get(
-          `${this.config.tenantUrl}/groups`,
+          groupsUrl,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -219,6 +221,9 @@ class VALDApiService {
         console.log('✅ Primary: Found groups:', JSON.stringify(groupsData).substring(0, 1000));
       } catch (e) {
         console.log('❌ Primary /groups failed:', e.response?.status, e.message);
+        console.log('   Full error:', e.response?.data || e.toString());
+        console.log('   Request URL:', e.config?.url);
+        console.log('   Request params:', e.config?.params);
       }
 
       // Step 2: Filter to only professional groups
