@@ -9,23 +9,27 @@ const __dirname = dirname(__filename);
 dotenv.config();
 
 // Initialize BigQuery client
-// In production, use BIGQUERY_CREDENTIALS environment variable
+// In production, use GOOGLE_APPLICATION_CREDENTIALS or BIGQUERY_CREDENTIALS
 // In development, use keyFilename
 let bigQueryConfig = {
   projectId: process.env.BIGQUERY_PROJECT_ID || 'vald-ref-data-copy'
 };
 
 if (process.env.BIGQUERY_CREDENTIALS) {
-  // Production: Parse credentials from environment variable
+  // Production: Parse credentials from environment variable (JSON string)
   try {
     bigQueryConfig.credentials = JSON.parse(process.env.BIGQUERY_CREDENTIALS);
-    console.log('✅ Using BigQuery credentials from environment variable');
+    console.log('✅ Using BigQuery credentials from BIGQUERY_CREDENTIALS environment variable');
   } catch (error) {
     console.error('❌ Failed to parse BIGQUERY_CREDENTIALS:', error.message);
     throw new Error('Invalid BIGQUERY_CREDENTIALS format');
   }
+} else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  // Production: Use credentials file path from GOOGLE_APPLICATION_CREDENTIALS
+  bigQueryConfig.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  console.log('✅ Using BigQuery credentials from file:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
 } else {
-  // Development: Use credentials file
+  // Development: Use credentials file from BIGQUERY_KEYFILE or default
   bigQueryConfig.keyFilename = join(__dirname, '..', '..', process.env.BIGQUERY_KEYFILE || 'vald-ref-data-copy-0c0792ad4944.json');
   console.log('ℹ️  Using BigQuery credentials from file (development mode)');
 }
