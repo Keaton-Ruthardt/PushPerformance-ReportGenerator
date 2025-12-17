@@ -4,11 +4,11 @@
   "main": "server/index.js",
   "type": "module",
   "scripts": {
-    "server": "node server/index.js",
+    "server": "node install-chrome.js && node server/index.js",
     "client": "cd client && npm start",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "build": "cd client && npm install --production=false && npm run build",
-    "start": "node server/index.js",
+    "start": "node install-chrome.js && node server/index.js",
     "sync-percentiles": "node server/scripts/syncPercentiles.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -27,7 +27,7 @@
     "node-cron": "^4.2.1",
     "pdfkit": "^0.17.2",
     "pg": "^8.16.3",
-    "puppeteer": "^24.29.1"
+    "puppeteer": "^24.33.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
