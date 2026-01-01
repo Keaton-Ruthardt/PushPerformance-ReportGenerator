@@ -956,8 +956,8 @@ async function fetchSelectedTests(profileIds, selectedTests) {
     // Create a map of all tests by their ID
     const testsById = new Map();
     if (allTests && allTests.data) {
-      allTests.data.forEach(test => {
-        const testId = test.id || test.testId || `${test.testType}-${test.testDate}`;
+      allTests.data.forEach((test, index) => {
+        const testId = test.id || test.testId || `${test.testType}-${test.recordedDateUtc}-${index}`;
         testsById.set(testId, test);
       });
     }
