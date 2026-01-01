@@ -899,7 +899,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
     );
   }
 
-  if (!reportData) {
+  if (!reportData && !athlete) {
     return (
       <div className="no-report">
         <p>Select an athlete to view their report</p>
