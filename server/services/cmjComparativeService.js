@@ -7,7 +7,7 @@ import { query, dataset } from '../config/bigquery.js';
 
 // The 13 CMJ metrics we're tracking for comparative analysis
 const CMJ_METRICS = {
-  jumpHeight: 'JUMP_HEIGHT_Trial_cm',
+  jumpHeight: 'JUMP_HEIGHT_INCHES_Trial_in', // Native inches field from API
   eccentricBrakingRFD: 'ECCENTRIC_BRAKING_RFD_Trial_N_per_s',
   forceAtZeroVelocity: 'FORCE_AT_ZERO_VELOCITY_Trial_N',
   eccentricPeakForce: 'PEAK_ECCENTRIC_FORCE_Trial_N',
@@ -19,11 +19,11 @@ const CMJ_METRICS = {
   peakPower: 'PEAK_TAKEOFF_POWER_Trial_W',
   peakPowerBM: 'BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg',
   rsi: 'FLIGHT_CONTRACTION_TIME_RATIO_Trial_',  // Standard RSI from VALD API (without No_Unit suffix)
-  countermovementDepth: 'COUNTERMOVEMENT_DEPTH_Trial_cm'
+  countermovementDepth: 'COUNTERMOVEMENT_DEPTH_INCHES_Trial_in' // Native inches field from API
 };
 
-// Metrics that need to be converted from cm to inches for display
-const CM_TO_INCHES_METRICS = ['jumpHeight', 'countermovementDepth'];
+// Metrics that are already in inches (no conversion needed)
+const CM_TO_INCHES_METRICS = [];
 
 /**
  * Convert centimeters to inches

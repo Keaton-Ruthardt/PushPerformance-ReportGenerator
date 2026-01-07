@@ -287,7 +287,7 @@ router.post('/generate', async (req, res) => {
         console.log('   RSI_MODIFIED_Trial_RSI_mod:', cmjTest.RSI_MODIFIED_Trial_RSI_mod);
 
         const cmjMetrics = {
-          jumpHeight: cmjTest.JUMP_HEIGHT_Trial_cm || cmjTest.JUMP_HEIGHT_IMP_MOM_Trial_cm,
+          jumpHeight: cmjTest.JUMP_HEIGHT_INCHES_Trial_in || cmjTest.JUMP_HEIGHT_Trial_cm / 2.54, // Use native inches field
           eccentricBrakingRFD: cmjTest.ECCENTRIC_BRAKING_RFD_Trial_N_per_s,
           forceAtZeroVelocity: cmjTest.FORCE_AT_ZERO_VELOCITY_Trial_N,
           eccentricPeakForce: cmjTest.PEAK_ECCENTRIC_FORCE_Trial_N,
@@ -299,7 +299,7 @@ router.post('/generate', async (req, res) => {
           peakPower: cmjTest.PEAK_TAKEOFF_POWER_Trial_W,
           peakPowerBM: cmjTest.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg,
           rsi: cmjTest.FLIGHT_CONTRACTION_TIME_RATIO_Trial_,  // Standard RSI (changed from RSI-modified)
-          countermovementDepth: cmjTest.COUNTERMOVEMENT_DEPTH_Trial_cm
+          countermovementDepth: cmjTest.COUNTERMOVEMENT_DEPTH_INCHES_Trial_in || cmjTest.COUNTERMOVEMENT_DEPTH_Trial_cm / 2.54
         };
 
         console.log('📊 Extracted CMJ Metrics (first 3):', {
@@ -328,11 +328,11 @@ router.post('/generate', async (req, res) => {
       try {
         const sjTest = valdData.forceDecks.squatJump;
         const sjMetrics = {
-          jumpHeight: sjTest.JUMP_HEIGHT_Trial_cm || sjTest.JUMP_HEIGHT_IMP_MOM_Trial_cm,
+          jumpHeight: sjTest.JUMP_HEIGHT_Trial_cm || sjTest.JUMP_HEIGHT_IMP_MOM_Trial_cm, // Convert from cm (no native inches field)
           forceAtPeakPower: sjTest.FORCE_AT_PEAK_POWER_Trial_N || sjTest.CONCENTRIC_PEAK_FORCE_Trial_N,
-          concentricPeakVelocity: sjTest.CONCENTRIC_PEAK_VELOCITY_Trial_m_per_s || sjTest.PEAK_TAKEOFF_VELOCITY_Trial_m_per_s,
-          peakPower: sjTest.PEAK_POWER_Trial_W || sjTest.CONCENTRIC_PEAK_POWER_Trial_W || sjTest.PEAK_TAKEOFF_POWER_Trial_W,
-          peakPowerBM: sjTest.BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg || sjTest.BODYMASS_RELATIVE_CONCENTRIC_PEAK_POWER_Trial_W_per_kg || sjTest.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg
+          concentricPeakVelocity: sjTest.VELOCITY_AT_PEAK_POWER_Trial_m_per_s || sjTest.PEAK_TAKEOFF_VELOCITY_Trial_m_per_s,
+          peakPower: sjTest.PEAK_TAKEOFF_POWER_Trial_W || sjTest.CONCENTRIC_PEAK_POWER_Trial_W,
+          peakPowerBM: sjTest.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg || sjTest.BODYMASS_RELATIVE_CONCENTRIC_PEAK_POWER_Trial_W_per_kg
         };
 
         console.log('📊 SJ METRICS:', sjMetrics);
@@ -385,7 +385,7 @@ router.post('/generate', async (req, res) => {
       try {
         const ppuTest = valdData.forceDecks.plyoPushUp;
         const ppuMetrics = {
-          pushupHeight: ppuTest.PUSHUP_HEIGHT_Trial_cm,
+          pushupHeight: ppuTest.PUSHUP_HEIGHT_INCHES_Trial_in || ppuTest.PUSHUP_HEIGHT_Trial_cm / 2.54, // Use native inches field
           eccentricPeakForce: ppuTest.PEAK_ECCENTRIC_FORCE_Trial_N,
           concentricPeakForce: ppuTest.PEAK_CONCENTRIC_FORCE_Trial_N,
           concentricRFD_L: ppuTest.CONCENTRIC_RFD_Left_N_per_s,

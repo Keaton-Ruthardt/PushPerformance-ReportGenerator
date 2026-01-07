@@ -7,7 +7,7 @@ import { query, dataset } from '../config/bigquery.js';
 
 // The 6 Plyometric Push Up metrics we're tracking for comparative analysis
 const PPU_METRICS = {
-  pushupHeight: 'PUSHUP_HEIGHT_Trial_cm',
+  pushupHeight: 'PUSHUP_HEIGHT_INCHES_Trial_in', // Native inches field from API
   eccentricPeakForce: 'PEAK_ECCENTRIC_FORCE_Trial_N',
   concentricPeakForce: 'PEAK_CONCENTRIC_FORCE_Trial_N',
   concentricRFD_L: 'CONCENTRIC_RFD_Left_N_per_s',
@@ -15,8 +15,8 @@ const PPU_METRICS = {
   eccentricBrakingRFD: 'ECCENTRIC_BRAKING_RFD_Trial_N_per_s'
 };
 
-// Metrics that need to be converted from cm to inches for display
-const CM_TO_INCHES_METRICS = ['pushupHeight'];
+// Metrics that are already in inches (no conversion needed)
+const CM_TO_INCHES_METRICS = [];
 
 /**
  * Convert centimeters to inches
