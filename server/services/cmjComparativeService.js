@@ -18,7 +18,7 @@ const CMJ_METRICS = {
   eccentricPeakPowerBM: 'BODYMASS_RELATIVE_ECCENTRIC_PEAK_POWER_Trial_W_per_kg',
   peakPower: 'PEAK_TAKEOFF_POWER_Trial_W',
   peakPowerBM: 'BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg',
-  rsi: 'FLIGHT_CONTRACTION_TIME_RATIO_Trial_No_Unit',  // Standard RSI from VALD API
+  rsi: 'FLIGHT_CONTRACTION_TIME_RATIO_Trial_',  // Standard RSI from VALD API (without No_Unit suffix)
   countermovementDepth: 'COUNTERMOVEMENT_DEPTH_Trial_cm'
 };
 

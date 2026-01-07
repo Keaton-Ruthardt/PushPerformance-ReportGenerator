@@ -6,12 +6,13 @@ import { query, dataset } from '../config/bigquery.js';
  */
 
 // The 5 Squat Jump metrics we're tracking for comparative analysis
+// IMPORTANT: These field names match what VALD API actually returns
 const SJ_METRICS = {
   jumpHeight: 'JUMP_HEIGHT_Trial_cm',
   forceAtPeakPower: 'FORCE_AT_PEAK_POWER_Trial_N',
-  concentricPeakVelocity: 'CONCENTRIC_PEAK_VELOCITY_Trial_m_per_s',
-  peakPower: 'PEAK_POWER_Trial_W',
-  peakPowerBM: 'BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg'
+  concentricPeakVelocity: 'VELOCITY_AT_PEAK_POWER_Trial_m_per_s', // Was: CONCENTRIC_PEAK_VELOCITY_Trial_m_per_s
+  peakPower: 'PEAK_TAKEOFF_POWER_Trial_W', // Was: PEAK_POWER_Trial_W
+  peakPowerBM: 'BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg' // Was: BODYMASS_RELATIVE_PEAK_POWER_Trial_W_per_kg
 };
 
 // Metrics that need to be converted from cm to inches for display
