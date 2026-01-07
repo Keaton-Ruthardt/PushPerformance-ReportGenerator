@@ -53,7 +53,7 @@ async function getProAthleteStats() {
       SELECT
         COUNT(*) as total_tests,
         ${metricStats}
-      FROM \`${dataset}.hj_results\`
+      FROM \`vald-ref-data-copy.${dataset}.HJ_result_updated\`
       WHERE (group_name_1 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
              group_name_2 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
              group_name_3 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball'))
@@ -230,7 +230,7 @@ async function getAthleteHistory(profileId, limit = 10) {
         test_date,
         full_name,
         ${metricColumns}
-      FROM \`${dataset}.hj_results\`
+      FROM \`vald-ref-data-copy.${dataset}.HJ_result_updated\`
       WHERE profile_id = @profileId
       ORDER BY test_date DESC
       LIMIT @limit

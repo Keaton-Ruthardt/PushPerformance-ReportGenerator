@@ -105,7 +105,7 @@ class MLBNormsService {
   }
 
   /**
-   * Get MLB norms for Hop RSI test (from hj_results table)
+   * Get MLB norms for Hop RSI test (from HJ_result_updated table)
    */
   async getHopRSINorms(position = null) {
     try {
@@ -116,7 +116,7 @@ class MLBNormsService {
           MIN(hop_rsi_avg_best_5) as min_rsi,
           MAX(hop_rsi_avg_best_5) as max_rsi,
           COUNT(*) as sample_size
-        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.hj_results\`
+        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.HJ_result_updated\`
         WHERE hop_rsi_avg_best_5 IS NOT NULL
           AND hop_rsi_avg_best_5 > 0
           AND (UPPER(group_name_1) LIKE '%MLB%' OR UPPER(group_name_1) LIKE '%MILB%' OR UPPER(group_name_1) LIKE '%PRO%')
@@ -259,7 +259,7 @@ class MLBNormsService {
         'cmj': 'cmj_results',
         'sj': 'sj_results',
         'imtp': 'imtp_results',
-        'hj': 'hj_results',
+        'hj': 'HJ_result_updated',
         'ppu': 'ppu_results'
       };
 

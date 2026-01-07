@@ -78,7 +78,7 @@ export async function getSprintResults(profileId) {
 export async function getHJResults(profileId) {
   const sql = `
     SELECT *
-    FROM \`vald-ref-data-copy.${dataset}.hj_results\`
+    FROM \`vald-ref-data-copy.${dataset}.HJ_result_updated\`
     WHERE profile_id = @profileId
     ORDER BY test_date DESC
   `;
@@ -232,7 +232,7 @@ export async function getComparativeStats(profileId, testType) {
   const tableMap = {
     'cmj': 'cmj_results',
     'sprint': '10yd_sprint_results',
-    'hj': 'hj_results',
+    'hj': 'HJ_result_updated',
     'handgrip': 'hand_grip_results',
     'imtp': 'imtp_results',
     'pushup': 'ppu_results',
