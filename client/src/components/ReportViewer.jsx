@@ -565,7 +565,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
               const metric = metrics.find(m => m.label === context.label);
               if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
 
-              const athleteValue = reportData.tests.cmj[metric.key];
+              const athleteValue = reportData.cmjComparison.metrics[metric.key]?.value;
               const mlbValue = reportData.cmjComparison.metrics[metric.key]?.proMean;
               const percentile = reportData.cmjComparison.metrics[metric.key]?.percentile;
 
@@ -625,7 +625,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
               const metric = metrics.find(m => m.label === context.label);
               if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
 
-              const athleteValue = reportData.tests.squatJump[metric.key];
+              const athleteValue = reportData.sjComparison.metrics[metric.key]?.value;
               const mlbValue = reportData.sjComparison.metrics[metric.key]?.proMean;
               const percentile = reportData.sjComparison.metrics[metric.key]?.percentile;
 
