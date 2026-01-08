@@ -287,7 +287,7 @@ router.post('/generate', async (req, res) => {
         console.log('   RSI_MODIFIED_Trial_RSI_mod:', cmjTest.RSI_MODIFIED_Trial_RSI_mod);
 
         const cmjMetrics = {
-          jumpHeight: cmjTest.JUMP_HEIGHT_INCHES_Trial_in || cmjTest.JUMP_HEIGHT_Trial_cm / 2.54, // Use native inches field
+          jumpHeight: cmjTest.JUMP_HEIGHT_INCHES_Trial_in || cmjTest.JUMP_HEIGHT_Trial_cm / 2.54, // Use native inches field from API
           eccentricBrakingRFD: cmjTest.ECCENTRIC_BRAKING_RFD_Trial_N_per_s,
           forceAtZeroVelocity: cmjTest.FORCE_AT_ZERO_VELOCITY_Trial_N,
           eccentricPeakForce: cmjTest.PEAK_ECCENTRIC_FORCE_Trial_N,
@@ -299,7 +299,7 @@ router.post('/generate', async (req, res) => {
           peakPower: cmjTest.PEAK_TAKEOFF_POWER_Trial_W,
           peakPowerBM: cmjTest.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg,
           rsi: cmjTest.FLIGHT_CONTRACTION_TIME_RATIO_Trial_,  // Standard RSI (changed from RSI-modified)
-          countermovementDepth: cmjTest.COUNTERMOVEMENT_DEPTH_INCHES_Trial_in || cmjTest.COUNTERMOVEMENT_DEPTH_Trial_cm / 2.54
+          countermovementDepth: cmjTest.COUNTERMOVEMENT_DEPTH_Trial_cm // Extract as cm, will be converted by comparative service
         };
 
         console.log('📊 Extracted CMJ Metrics (first 3):', {
