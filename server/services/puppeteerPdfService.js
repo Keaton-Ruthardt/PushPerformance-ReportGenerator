@@ -680,7 +680,7 @@ function generateReportHtml(reportData, logoBase64 = null) {
         <tbody>
           <tr>
             <td>Jump Height</td>
-            <td>${sj.jumpHeight ? `${sj.jumpHeight.toFixed(2)} in` : 'N/A'}</td>
+            <td>${sj.jumpHeight ? `${(sj.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
             <td>${sjComp.metrics?.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
           </tr>
           <tr>
@@ -805,8 +805,8 @@ function generateReportHtml(reportData, logoBase64 = null) {
         <tbody>
           <tr>
             <td>Jump Height</td>
-            <td>${slCmjLeft?.jumpHeight ? `${slCmjLeft.jumpHeight.toFixed(2)} in` : 'N/A'}</td>
-            <td>${slCmjRight?.jumpHeight ? `${slCmjRight.jumpHeight.toFixed(2)} in` : 'N/A'}</td>
+            <td>${slCmjLeft?.jumpHeight ? `${(slCmjLeft.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
+            <td>${slCmjRight?.jumpHeight ? `${(slCmjRight.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
             <td style="color: ${(() => {
               if (!slCmjLeft?.jumpHeight || !slCmjRight?.jumpHeight) return '#ccc';
               const diff = Math.abs(slCmjLeft.jumpHeight - slCmjRight.jumpHeight);
