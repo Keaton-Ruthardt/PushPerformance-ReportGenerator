@@ -523,7 +523,7 @@ router.post('/generate', async (req, res) => {
       slCmjWarning: valdData.slCmjWarning || null, // Add warning if only one leg found
       tests: {
         cmj: valdData.forceDecks?.cmj ? {
-          jumpHeight: cmToInches(valdData.forceDecks.cmj.JUMP_HEIGHT_IMP_MOM_Trial_cm),
+          jumpHeight: valdData.forceDecks.cmj.JUMP_HEIGHT_INCHES_Trial_in,
           peakPower: valdData.forceDecks.cmj.PEAK_TAKEOFF_POWER_Trial_W,
           peakPowerBM: valdData.forceDecks.cmj.BODYMASS_RELATIVE_TAKEOFF_POWER_Trial_W_per_kg,
           rsi: valdData.forceDecks.cmj.FLIGHT_CONTRACTION_TIME_RATIO_Trial_,  // Standard RSI (changed from RSI-modified)
