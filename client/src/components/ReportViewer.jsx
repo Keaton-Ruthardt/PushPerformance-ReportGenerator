@@ -979,7 +979,7 @@ const ReportViewer = ({ athlete, selectedTests }) => {
                     <tbody>
                       <tr>
                         <td>Jump Height</td>
-                        <td>{reportData.tests.cmj.jumpHeight ? `${(reportData.tests.cmj.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
+                        <td>{reportData.tests.cmj.jumpHeight ? `${reportData.tests.cmj.jumpHeight.toFixed(2)} in` : 'N/A'}</td>
                         <td>{reportData.cmjComparison?.metrics?.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
                       </tr>
                       <tr>
