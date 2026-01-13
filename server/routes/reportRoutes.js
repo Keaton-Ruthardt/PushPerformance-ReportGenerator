@@ -426,7 +426,12 @@ router.post('/generate', async (req, res) => {
 
           // Only run comparison if we have all three metrics
           if (hopMetrics.rsi !== null && hopMetrics.jumpHeight !== null && hopMetrics.gct !== null) {
-            hopComparison = await getHopComparativeAnalysis(hopMetrics);
+            // Convert jump height from cm to inches for comparison (BigQuery table stores in inches)
+            const hopMetricsForComparison = {
+              ...hopMetrics,
+              jumpHeight: hopMetrics.jumpHeight / 2.54  // Convert cm to inches
+            };
+            hopComparison = await getHopComparativeAnalysis(hopMetricsForComparison);
             console.log(`✅ Hop Test comparison complete - analyzed against ${hopComparison.totalProTests} professional athletes`);
           } else {
             console.log('⚠️  Hop test metrics not fully populated');

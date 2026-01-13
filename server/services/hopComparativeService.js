@@ -8,12 +8,13 @@ import { query, dataset } from '../config/bigquery.js';
 // The 3 Hop Test metrics we're tracking for comparative analysis
 const HOP_METRICS = {
   rsi: 'hop_rsi_avg_best_5',  // Regular RSI (flight time / GCT ratio), not RSI_JH
-  jumpHeight: 'hop_jump_height_avg_best_5',
+  jumpHeight: 'hop_jump_height_avg_best_5_inches',  // Already in inches
   gct: 'hop_gct_avg_best_5'
 };
 
 // Metrics that need to be converted from cm to inches for display
-const CM_TO_INCHES_METRICS = ['jumpHeight'];
+// Jump height is now already stored in inches in the new hop_test_results table
+const CM_TO_INCHES_METRICS = [];
 
 /**
  * Convert centimeters to inches
@@ -53,12 +54,12 @@ async function getProAthleteStats() {
       SELECT
         COUNT(*) as total_tests,
         ${metricStats}
-      FROM \`vald-ref-data-copy.${dataset}.HJ_result_updated\`
-      WHERE (group_name_1 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
-             group_name_2 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball') OR
-             group_name_3 IN ('Pro', 'MiLB', 'MLB', 'Pro Baseball'))
+      FROM \`vald-ref-data-copy.${dataset}.hop_test_results\`
+      WHERE (group_name_1 = 'MLB/ MiLB' OR
+             group_name_2 = 'MLB/ MiLB' OR
+             group_name_3 = 'MLB/ MiLB')
         AND hop_rsi_avg_best_5 IS NOT NULL
-        AND hop_jump_height_avg_best_5 IS NOT NULL
+        AND hop_jump_height_avg_best_5_inches IS NOT NULL
         AND hop_gct_avg_best_5 IS NOT NULL
     `;
 
@@ -177,25 +178,26 @@ async function getComparativeAnalysis(athleteMetrics) {
       const lowerIsBetter = key === 'gct'; // Only GCT is lower-is-better
       const needsConversion = CM_TO_INCHES_METRICS.includes(key);
 
-      // IMPORTANT: athleteValue is in cm (raw from database/API), proStats are also in cm
-      // So we calculate percentile using raw cm values (no conversion needed)
-      // We only convert to inches for DISPLAY purposes
+      // IMPORTANT: All values are in their final units:
+      // - RSI: no unit (ratio)
+      // - jumpHeight: inches (athlete value converted in reportRoutes, BigQuery stores in inches)
+      // - GCT: seconds
       comparison.metrics[key] = {
-        value: needsConversion ? cmToInches(athleteValue) : athleteValue, // Convert for display
+        value: athleteValue,
         columnName: column,
-        proMean: needsConversion ? cmToInches(proStats[`${key}_mean`]) : proStats[`${key}_mean`],
-        proStdDev: needsConversion ? cmToInches(proStats[`${key}_stddev`]) : proStats[`${key}_stddev`],
-        percentile: calculatePercentile(athleteValue, key, proStats, lowerIsBetter, false), // No conversion - both values are in cm
-        p1: needsConversion ? cmToInches(proStats[`${key}_p1`]) : proStats[`${key}_p1`],
-        p5: needsConversion ? cmToInches(proStats[`${key}_p5`]) : proStats[`${key}_p5`],
-        p10: needsConversion ? cmToInches(proStats[`${key}_p10`]) : proStats[`${key}_p10`],
-        p25: needsConversion ? cmToInches(proStats[`${key}_p25`]) : proStats[`${key}_p25`],
-        p50: needsConversion ? cmToInches(proStats[`${key}_p50`]) : proStats[`${key}_p50`],
-        p75: needsConversion ? cmToInches(proStats[`${key}_p75`]) : proStats[`${key}_p75`],
-        p90: needsConversion ? cmToInches(proStats[`${key}_p90`]) : proStats[`${key}_p90`],
-        p95: needsConversion ? cmToInches(proStats[`${key}_p95`]) : proStats[`${key}_p95`],
-        p99: needsConversion ? cmToInches(proStats[`${key}_p99`]) : proStats[`${key}_p99`],
-        unit: needsConversion ? 'in' : ''
+        proMean: proStats[`${key}_mean`],
+        proStdDev: proStats[`${key}_stddev`],
+        percentile: calculatePercentile(athleteValue, key, proStats, lowerIsBetter, false),
+        p1: proStats[`${key}_p1`],
+        p5: proStats[`${key}_p5`],
+        p10: proStats[`${key}_p10`],
+        p25: proStats[`${key}_p25`],
+        p50: proStats[`${key}_p50`],
+        p75: proStats[`${key}_p75`],
+        p90: proStats[`${key}_p90`],
+        p95: proStats[`${key}_p95`],
+        p99: proStats[`${key}_p99`],
+        unit: key === 'jumpHeight' ? 'in' : (key === 'gct' ? 's' : '')
       };
     }
 
@@ -230,7 +232,7 @@ async function getAthleteHistory(profileId, limit = 10) {
         test_date,
         full_name,
         ${metricColumns}
-      FROM \`vald-ref-data-copy.${dataset}.HJ_result_updated\`
+      FROM \`vald-ref-data-copy.${dataset}.hop_test_results\`
       WHERE profile_id = @profileId
       ORDER BY test_date DESC
       LIMIT @limit
