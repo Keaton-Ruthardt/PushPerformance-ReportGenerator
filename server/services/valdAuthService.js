@@ -21,15 +21,16 @@ const requestNewToken = async () => {
     console.log('🔑 Requesting new VALD API token...');
 
     const response = await axios.post(
-      'https://security.valdperformance.com/connect/token',
-      new URLSearchParams({
+      process.env.AUTH_URL || 'https://auth.prd.vald.com/oauth/token',
+      {
         grant_type: 'client_credentials',
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
-      }),
+        audience: 'vald-api-external',
+      },
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
       }
     );

@@ -18,7 +18,7 @@ dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 class VALDApiService {
   constructor() {
     this.config = {
-      authUrl: process.env.AUTH_URL || 'https://security.valdperformance.com/connect/token',
+      authUrl: process.env.AUTH_URL || 'https://auth.prd.vald.com/oauth/token',
       profileUrl: process.env.PROFILE_URL || 'https://prd-use-api-externalprofile.valdperformance.com',
       tenantUrl: process.env.TENANT_URL || 'https://prd-use-api-externaltenants.valdperformance.com',
       forceDecksUrl: process.env.FORCEDECKS_URL || 'https://prd-use-api-extforcedecks.valdperformance.com',
@@ -33,7 +33,7 @@ class VALDApiService {
     this.config2 = null;
     if (process.env.VALD_API_KEY_2 && process.env.VALD_API_SECRET_2 && process.env.TENANT_ID_2) {
       this.config2 = {
-        authUrl: process.env.AUTH_URL || 'https://security.valdperformance.com/connect/token',
+        authUrl: process.env.AUTH_URL || 'https://auth.prd.vald.com/oauth/token',
         profileUrl: process.env.PROFILE_URL || 'https://prd-use-api-externalprofile.valdperformance.com',
         tenantUrl: process.env.TENANT_URL || 'https://prd-use-api-externaltenants.valdperformance.com',
         forceDecksUrl: process.env.FORCEDECKS_URL || 'https://prd-use-api-extforcedecks.valdperformance.com',
@@ -65,15 +65,14 @@ class VALDApiService {
 
       console.log(`🔑 Authenticating with VALD Primary — client_id length: ${clientId.length}, secret length: ${clientSecret.length}, auth URL: ${this.config.authUrl}`);
 
-      const params = new URLSearchParams({
+      const response = await axios.post(this.config.authUrl, {
         grant_type: 'client_credentials',
         client_id: clientId,
-        client_secret: clientSecret
-      });
-
-      const response = await axios.post(this.config.authUrl, params, {
+        client_secret: clientSecret,
+        audience: 'vald-api-external'
+      }, {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/json'
         }
       });
 
@@ -106,15 +105,14 @@ class VALDApiService {
       const clientId2 = this.config2.apiKey.trim().replace(/"/g, '');
       const clientSecret2 = this.config2.apiSecret.trim().replace(/"/g, '');
 
-      const params2 = new URLSearchParams({
+      const response = await axios.post(this.config2.authUrl, {
         grant_type: 'client_credentials',
         client_id: clientId2,
-        client_secret: clientSecret2
-      });
-
-      const response = await axios.post(this.config2.authUrl, params2, {
+        client_secret: clientSecret2,
+        audience: 'vald-api-external'
+      }, {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/json'
         }
       });
 
