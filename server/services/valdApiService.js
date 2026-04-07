@@ -60,11 +60,18 @@ class VALDApiService {
         throw new Error('API Key or Secret is undefined. Check environment variables.');
       }
 
-      const response = await axios.post(this.config.authUrl, {
+      const clientId = this.config.apiKey.trim().replace(/"/g, '');
+      const clientSecret = this.config.apiSecret.trim().replace(/"/g, '');
+
+      console.log(`🔑 Authenticating with VALD Primary — client_id length: ${clientId.length}, secret length: ${clientSecret.length}, auth URL: ${this.config.authUrl}`);
+
+      const params = new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: this.config.apiKey.replace(/"/g, ''),  // Remove quotes if present
-        client_secret: this.config.apiSecret.replace(/"/g, '')
-      }, {
+        client_id: clientId,
+        client_secret: clientSecret
+      });
+
+      const response = await axios.post(this.config.authUrl, params, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
@@ -96,11 +103,16 @@ class VALDApiService {
         return null;
       }
 
-      const response = await axios.post(this.config2.authUrl, {
+      const clientId2 = this.config2.apiKey.trim().replace(/"/g, '');
+      const clientSecret2 = this.config2.apiSecret.trim().replace(/"/g, '');
+
+      const params2 = new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: this.config2.apiKey.replace(/"/g, ''),
-        client_secret: this.config2.apiSecret.replace(/"/g, '')
-      }, {
+        client_id: clientId2,
+        client_secret: clientSecret2
+      });
+
+      const response = await axios.post(this.config2.authUrl, params2, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
