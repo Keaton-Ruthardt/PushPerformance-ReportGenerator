@@ -590,14 +590,24 @@ class VALDApiService {
     // Convert single profileId to array, or use the array if provided
     const profileIds = Array.isArray(profileId) ? profileId : (profileId ? [profileId] : []);
 
-    // Helper function to fetch from a specific config
+    // Helper function to fetch from a specific config.
+    // VALD's /tests endpoint silently caps each response at 50 records sorted by
+    // modifiedDateUtc ascending and exposes no cursor/page token, so we paginate
+    // by advancing ModifiedFromUtc past the last record's modifiedDateUtc until
+    // the API returns fewer than a full page.
     const fetchFromApi = async (config, token, source, specificProfileId = null) => {
-      try {
-        const endpoint = `${config.forceDecksUrl}/tests`;
+      const endpoint = `${config.forceDecksUrl}/tests`;
+      const PAGE_SIZE = 50;     // VALD's effective per-response cap
+      const MAX_PAGES = 400;    // safety: 400 * 50 = 20k records per source/profile
+      const collected = [];
+      const seenTestIds = new Set();
+      let cursor = modifiedFromUtc;
+
+      for (let page = 0; page < MAX_PAGES; page++) {
         const params = {
           TenantId: config.tenantId,
-          ModifiedFromUtc: modifiedFromUtc,
-          limit: 100,
+          ModifiedFromUtc: cursor,
+          limit: 1000,
           IncludeExtendedParameters: true,
           IncludeAttributes: true
         };
@@ -610,32 +620,47 @@ class VALDApiService {
           params.TestType = testType;
         }
 
-        const response = await axios.get(endpoint, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          params
-        });
-
-        if (response.data) {
-          const tests = response.data.tests || response.data.data || [];
-
-          // Add source to each test
-          const testsWithSource = tests.map(test => ({
-            ...test,
-            apiSource: source
-          }));
-
-          console.log(`📊 ${source} API: Found ${testsWithSource.length} tests${testType ? ` (${testType})` : ''}${specificProfileId ? ` for profile ${specificProfileId}` : ''}`);
-          return testsWithSource;
+        let tests;
+        try {
+          const response = await axios.get(endpoint, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            params
+          });
+          tests = response.data?.tests || response.data?.data || [];
+        } catch (error) {
+          console.error(`Error fetching tests from ${source} API (page ${page}):`, error.response?.data || error.message);
+          break;
         }
 
-        return [];
-      } catch (error) {
-        console.error(`Error fetching tests from ${source} API:`, error.response?.data || error.message);
-        return [];
+        if (tests.length === 0) break;
+
+        let maxModified = null;
+        for (const test of tests) {
+          const id = test.testId || test.id;
+          if (id && seenTestIds.has(id)) continue;
+          if (id) seenTestIds.add(id);
+          collected.push({ ...test, apiSource: source });
+          if (test.modifiedDateUtc && (!maxModified || test.modifiedDateUtc > maxModified)) {
+            maxModified = test.modifiedDateUtc;
+          }
+        }
+
+        // Last page reached when VALD returns fewer than its hard cap.
+        if (tests.length < PAGE_SIZE) break;
+
+        // Advance cursor to one millisecond past the latest modifiedDateUtc on
+        // this page. Falling back to the previous cursor would loop forever.
+        if (!maxModified) break;
+        const nextCursor = new Date(new Date(maxModified).getTime() + 1).toISOString();
+        if (nextCursor === cursor) break;
+        cursor = nextCursor;
       }
+
+      console.log(`📊 ${source} API: Found ${collected.length} tests${testType ? ` (${testType})` : ''}${specificProfileId ? ` for profile ${specificProfileId}` : ''}`);
+      return collected;
     };
 
     // If profileIds provided, fetch tests for each profile ID from both APIs
