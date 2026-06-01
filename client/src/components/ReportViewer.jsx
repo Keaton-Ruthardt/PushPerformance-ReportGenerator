@@ -1,186 +1,544 @@
-import React, { useState, useEffect } from 'react';
-import { Radar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-} from 'chart.js';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { I } from './Shell.jsx';
+import { PercentileBar, Radar, TierTag, MetricsTable } from './Viz.jsx';
 import MetricSelector from './MetricSelector';
-import './ReportViewer.css';
 
-// Register ChartJS components
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
+// ──────────────────────────────────────────────────────────────────────────────
+// Test type metadata
+// ──────────────────────────────────────────────────────────────────────────────
+const TEST_DEFS = {
+  cmj: {
+    title: 'Countermovement Jump',
+    short: 'CMJ',
+    description: 'Vertical jump from a standing start with a countermovement. Captures propulsive power, eccentric braking, and reactive strategy.',
+    metrics: [
+      { key: 'jumpHeight',           label: 'Jump Height',           unit: 'in' },
+      { key: 'rsi',                  label: 'RSI',                   unit: '' },
+      { key: 'peakPowerBM',          label: 'Peak Power / BM',       unit: 'W/kg' },
+      { key: 'eccentricBrakingRFD',  label: 'Ecc Braking RFD',       unit: 'N/s' },
+      { key: 'concentricPeakVelocity', label: 'Con Peak Velocity',   unit: 'm/s' },
+      { key: 'eccentricPeakPowerBM', label: 'Ecc Peak Power / BM',   unit: 'W/kg' },
+      { key: 'forceAtZeroVelocity',  label: 'Force @ Zero Velocity', unit: 'N' },
+      { key: 'eccentricPeakForce',   label: 'Ecc Peak Force',        unit: 'N' },
+      { key: 'concentricImpulse',    label: 'Concentric Impulse',    unit: 'Ns' },
+      { key: 'eccentricPeakVelocity', label: 'Ecc Peak Velocity',    unit: 'm/s' },
+      { key: 'eccentricPeakPower',   label: 'Ecc Peak Power',        unit: 'W' },
+      { key: 'peakPower',            label: 'Peak Power',            unit: 'W' },
+      { key: 'countermovementDepth', label: 'Countermovement Depth', unit: 'cm' },
+    ],
+    defaultRadar: ['jumpHeight', 'rsi', 'peakPowerBM', 'eccentricBrakingRFD', 'concentricPeakVelocity', 'eccentricPeakPowerBM'],
+  },
+  squatJump: {
+    title: 'Squat Jump',
+    short: 'SJ',
+    description: 'Concentric-only vertical jump from a paused quarter-squat. Isolates propulsive power without the stretch-shortening cycle.',
+    metrics: [
+      { key: 'jumpHeight',             label: 'Jump Height',          unit: 'in' },
+      { key: 'forceAtPeakPower',       label: 'Force @ Peak Power',   unit: 'N' },
+      { key: 'concentricPeakVelocity', label: 'Con Peak Velocity',    unit: 'm/s' },
+      { key: 'peakPower',              label: 'Peak Power',           unit: 'W' },
+      { key: 'peakPowerBM',            label: 'Peak Power / BW',      unit: 'W/kg' },
+    ],
+    defaultRadar: ['jumpHeight', 'forceAtPeakPower', 'concentricPeakVelocity', 'peakPower', 'peakPowerBM'],
+  },
+  imtp: {
+    title: 'Isometric Mid-Thigh Pull',
+    short: 'IMTP',
+    description: 'Maximal isometric pull against a fixed bar at mid-thigh. Measures peak force and early-phase rate of force development.',
+    metrics: [
+      { key: 'peakVerticalForce', label: 'Peak Vertical Force',  unit: 'N' },
+      { key: 'peakForceBM',       label: 'Peak Force / BM',       unit: 'N/kg' },
+      { key: 'forceAt100ms',      label: 'Force @ 100 ms',        unit: 'N' },
+      { key: 'timeToPeakForce',   label: 'Time to Peak Force',    unit: 's', invert: true },
+    ],
+    defaultRadar: ['peakVerticalForce', 'peakForceBM', 'forceAt100ms', 'timeToPeakForce'],
+  },
+  hopTest: {
+    title: 'Hop Test',
+    short: 'HOP',
+    description: 'Repeated pogo hops measuring reactive strength (flight time / ground contact). A clean signal of stretch-shortening cycle quality.',
+    metrics: [
+      { key: 'rsi',         label: 'RSI',                unit: '' },
+      { key: 'jumpHeight',  label: 'Jump Height',        unit: 'in' },
+      { key: 'gct',         label: 'Ground Contact',     unit: 's', invert: true },
+    ],
+    defaultRadar: ['rsi', 'jumpHeight', 'gct'],
+  },
+  ppu: {
+    title: 'Plyometric Push-Up',
+    short: 'PPU',
+    description: 'Explosive push-up off dual force plates. Quantifies upper-body force, RFD, and left/right symmetry.',
+    metrics: [
+      { key: 'pushupHeight',         label: 'Push-Up Height',  unit: 'in' },
+      { key: 'eccentricPeakForce',   label: 'Ecc Peak Force',  unit: 'N' },
+      { key: 'concentricPeakForce',  label: 'Con Peak Force',  unit: 'N' },
+      { key: 'concentricRFD_L',      label: 'Con RFD (L)',     unit: 'N/s' },
+      { key: 'concentricRFD_R',      label: 'Con RFD (R)',     unit: 'N/s' },
+      { key: 'eccentricBrakingRFD',  label: 'Ecc Braking RFD', unit: 'N/s' },
+    ],
+    defaultRadar: ['pushupHeight', 'eccentricPeakForce', 'concentricPeakForce', 'concentricRFD_L', 'concentricRFD_R', 'eccentricBrakingRFD'],
+  },
+};
 
-const ReportViewer = ({ athlete, selectedTests }) => {
+const COMP_KEY = { cmj: 'cmjComparison', squatJump: 'sjComparison', imtp: 'imtpComparison', hopTest: 'hopComparison', ppu: 'ppuComparison' };
+const TESTS_KEY = { cmj: 'cmj', squatJump: 'squatJump', imtp: 'imtp', hopTest: 'hopTest', ppu: 'ppu' };
+
+function buildMetrics(testKey, reportData) {
+  const def = TEST_DEFS[testKey];
+  const compKey = COMP_KEY[testKey];
+  const testsKey = TESTS_KEY[testKey];
+  const comp = reportData?.[compKey]?.metrics;
+  const test = reportData?.tests?.[testsKey];
+  if (!def || !comp || !test) return [];
+
+  return def.metrics
+    .map((m) => {
+      const c = comp[m.key];
+      const value = test[m.key] ?? c?.value;
+      if (value === undefined || value === null || c === undefined) return null;
+      return {
+        key: m.key,
+        label: m.label,
+        value,
+        pop: c.proMean ?? c.populationMean,
+        pct: c.percentile,
+        unit: m.unit,
+        invert: m.invert || false,
+      };
+    })
+    .filter(Boolean);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+function AthleteHeader({ athlete, info, setInfo }) {
+  const initials = (athlete.name || '').split(' ').map((n) => n[0]).slice(0, 2).join('');
+  return (
+    <div
+      className="surface-card"
+      style={{ padding: '22px 26px', marginBottom: 24, borderRadius: 6, display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 24, alignItems: 'center' }}
+    >
+      <div style={{ width: 72, height: 72, borderRadius: 6, background: 'var(--ink)', color: 'var(--paper)', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 700, letterSpacing: '0.02em', fontFamily: 'var(--serif)' }}>
+        {initials}
+      </div>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div className="mono muted" style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Performance Assessment Report</div>
+          <span className="pill" style={{ background: 'var(--ink)', color: 'var(--paper)', borderColor: 'transparent', height: 'auto', padding: '4px 10px', lineHeight: 1.3 }}>MLB Professional</span>
+        </div>
+        <div className="h1" style={{ fontSize: 32, marginBottom: 4 }}>{athlete.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'var(--ink-3)', fontSize: 13 }}>
+          {athlete.position && athlete.position !== 'N/A' && <><span><b>{athlete.position}</b></span><span style={{ color: 'var(--line-2)' }}>·</span></>}
+          {athlete.team && athlete.team !== 'N/A' && <span>{athlete.team}</span>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', borderLeft: '1px solid var(--line)' }}>
+        <KpiInput label="Age"    value={info.age}    onChange={(v) => setInfo({ ...info, age: v })} placeholder="—" />
+        <KpiInput label="Height" value={info.height} onChange={(v) => setInfo({ ...info, height: v })} placeholder="—" />
+        <KpiInput label="Weight" value={info.weight} onChange={(v) => setInfo({ ...info, weight: v })} placeholder="—" />
+      </div>
+    </div>
+  );
+}
+
+function KpiInput({ label, value, onChange, placeholder }) {
+  return (
+    <div style={{ padding: '16px 18px', borderRight: '1px solid var(--line)', flex: 1, minWidth: 0 }}>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>{label}</div>
+      <input
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          marginTop: 4, fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 700,
+          letterSpacing: '-0.02em', color: 'var(--ink)', background: 'transparent',
+          border: 'none', outline: 'none', width: '100%',
+        }}
+      />
+    </div>
+  );
+}
+
+function ReportTabs({ tabs, active, setActive }) {
+  return (
+    <div style={{ borderBottom: '1px solid var(--line)', marginBottom: 28, position: 'relative' }}>
+      <div style={{ display: 'flex', gap: 0, overflowX: 'auto' }}>
+        {tabs.map((t) => {
+          const on = active === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActive(t.id)}
+              style={{
+                position: 'relative', padding: '14px 18px', border: 0, background: 'transparent',
+                fontSize: 13, fontWeight: 600, letterSpacing: '0.005em', whiteSpace: 'nowrap',
+                color: on ? 'var(--ink)' : 'var(--ink-4)', cursor: 'pointer',
+                borderBottom: on ? '2px solid var(--ink)' : '2px solid transparent', marginBottom: -1,
+              }}
+            >
+              <span className="mono" style={{ fontSize: 10.5, color: on ? 'var(--accent)' : 'var(--ink-5)', marginRight: 8, letterSpacing: '0.05em' }}>
+                {String(t.idx).padStart(2, '0')}
+              </span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RecTextarea({ value, onChange, placeholder }) {
+  return (
+    <textarea
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={6}
+      style={{
+        width: '100%', padding: '10px 12px', background: '#fff',
+        border: '1px solid var(--line-2)', borderRadius: 4,
+        outline: 'none', resize: 'vertical', lineHeight: 1.5,
+        fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink)',
+      }}
+    />
+  );
+}
+
+function CompositeStrip({ metrics }) {
+  if (!metrics || metrics.length === 0) return null;
+  const validPcts = metrics.map((m) => m.pct).filter((p) => p !== null && p !== undefined && !isNaN(p));
+  if (validPcts.length === 0) return null;
+  const composite = Math.round(validPcts.reduce((a, b) => a + b, 0) / validPcts.length);
+  const eliteCount = metrics.filter((m) => m.pct >= 85).length;
+  const belowCount = metrics.filter((m) => m.pct < 40).length;
+
+  return (
+    <div className="surface-card" style={{ padding: '18px 22px', marginBottom: 24, display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 28, alignItems: 'center' }}>
+      <div>
+        <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Composite Score</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 40, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1 }}>{composite}</div>
+          <div className="muted mono" style={{ fontSize: 12 }}>%ile</div>
+          <TierTag pct={composite} />
+        </div>
+      </div>
+      <div style={{ paddingLeft: 28, borderLeft: '1px solid var(--line)' }}>
+        <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>Distribution vs Population</div>
+        <PercentileBar pct={composite} />
+      </div>
+      <div style={{ display: 'flex', gap: 20 }}>
+        <div>
+          <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Elite Metrics</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, marginTop: 4 }}>
+            {eliteCount}<span className="muted mono" style={{ fontSize: 12, marginLeft: 4 }}>/ {metrics.length}</span>
+          </div>
+        </div>
+        <div>
+          <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Below Avg</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, marginTop: 4, color: belowCount > 0 ? 'var(--below)' : 'var(--ink)' }}>
+            {belowCount}<span className="muted mono" style={{ fontSize: 12, marginLeft: 4 }}>/ {metrics.length}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TestTab({ testKey, reportData, recs, setRecs, selectedRadarKeys, setSelectedRadarKeys }) {
+  const def = TEST_DEFS[testKey];
+  const metrics = useMemo(() => buildMetrics(testKey, reportData), [testKey, reportData]);
+  const date = reportData?.[COMP_KEY[testKey]]?.testDate || reportData?.tests?.[TESTS_KEY[testKey]]?.testDate;
+  const radarMetrics = metrics.filter((m) => selectedRadarKeys.includes(m.key));
+
+  if (!metrics || metrics.length === 0) {
+    return (
+      <div>
+        <div style={{ marginBottom: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Test · {def.short}</div>
+          <div className="h2">{def.title}</div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 4, maxWidth: 560 }}>{def.description}</div>
+        </div>
+        <div className="surface-card" style={{ padding: 40, textAlign: 'center', color: 'var(--ink-4)' }}>
+          No comparative data available for this test (insufficient population sample).
+        </div>
+      </div>
+    );
+  }
+
+  const availableMetricsForSelector = def.metrics.map((m) => ({
+    key: m.key,
+    label: m.label,
+    available: metrics.some((mm) => mm.key === m.key),
+  }));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 }}>
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Test · {def.short}</div>
+          <div className="h2">{def.title}</div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 4, maxWidth: 560 }}>{def.description}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {date && <span className="pill ghost"><span className="mono">{new Date(date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}</span></span>}
+        </div>
+      </div>
+
+      <CompositeStrip metrics={metrics} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: 24, marginBottom: 28, alignItems: 'stretch' }}>
+        <div>
+          <div className="h3" style={{ marginBottom: 10, color: 'var(--ink-3)' }}>Detailed Metrics</div>
+          <MetricsTable metrics={metrics} />
+        </div>
+        <div>
+          <div className="h3" style={{ marginBottom: 10, color: 'var(--ink-3)' }}>Athlete vs Population</div>
+          <div className="surface-card" style={{ padding: '18px 18px 10px', height: 'calc(100% - 28px)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 14, fontSize: 11.5, fontWeight: 600 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--ink)', borderRadius: 2 }} />Athlete</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--avg-soft)', border: '1px dashed var(--avg)', borderRadius: 2 }} />Pop. Avg (50)</span>
+              </div>
+              <span className="mono muted" style={{ fontSize: 10.5 }}>SCALE · 0–100 %ILE</span>
+            </div>
+            <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: '4px 0' }}>
+              <Radar metrics={radarMetrics} size={380} />
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <MetricSelector
+                testType={testKey}
+                availableMetrics={availableMetricsForSelector.filter((m) => m.available)}
+                selectedMetrics={selectedRadarKeys}
+                onMetricsChange={setSelectedRadarKeys}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div className="h3" style={{ color: 'var(--ink-3)' }}>Trainer Recommendations</div>
+        </div>
+        <RecTextarea
+          value={recs}
+          onChange={setRecs}
+          placeholder={`Prescribe training focus for ${def.short}: exercises, volume, progression, reassessment window…`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SingleLegTab({ reportData, recs, setRecs }) {
+  const left = reportData?.tests?.singleLegCMJ_Left;
+  const right = reportData?.tests?.singleLegCMJ_Right;
+
+  const calcAsymmetry = (l, r) => {
+    if (!l || !r || l === 0 || r === 0) return null;
+    return Math.abs(l - r) / ((l + r) / 2) * 100;
+  };
+
+  const rows = [
+    { label: 'Jump Height (in)',          l: left?.jumpHeight,          r: right?.jumpHeight,          decimals: 2 },
+    { label: 'Peak Power / BM (W/kg)',    l: left?.peakPowerBM,         r: right?.peakPowerBM,         decimals: 1 },
+    { label: 'Concentric Peak Force (N)', l: left?.concentricPeakForce, r: right?.concentricPeakForce, decimals: 0 },
+    { label: 'Eccentric Peak Force (N)',  l: left?.eccentricPeakForce,  r: right?.eccentricPeakForce,  decimals: 0 },
+    { label: 'Eccentric Braking RFD (N/s)', l: left?.eccentricBrakingRFD, r: right?.eccentricBrakingRFD, decimals: 0 },
+    { label: 'RSI',                       l: left?.rsi,                 r: right?.rsi,                 decimals: 2 },
+  ].map((row) => ({ ...row, asy: calcAsymmetry(row.l, row.r) }));
+
+  const asyColor = (a) => a === null ? 'var(--ink-4)' : a <= 5 ? 'var(--elite)' : a <= 10 ? 'var(--avg)' : 'var(--below)';
+
+  if (!left && !right) {
+    return (
+      <div>
+        <div style={{ marginBottom: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Test · SL CMJ</div>
+          <div className="h2">Single Leg CMJ — Symmetry</div>
+        </div>
+        <div className="surface-card" style={{ padding: 40, textAlign: 'center', color: 'var(--ink-4)' }}>
+          No single-leg CMJ data available for this athlete.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Test · SL CMJ</div>
+        <div className="h2">Single Leg CMJ — Symmetry</div>
+        <div className="muted" style={{ fontSize: 13, marginTop: 4, maxWidth: 560 }}>
+          Unilateral jump testing to quantify L/R asymmetry. Targets are &lt;5% for each metric.
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 24 }}>
+        {rows.map((r) => {
+          const hasData = (r.l !== null && r.l !== undefined) || (r.r !== null && r.r !== undefined);
+          return (
+            <div key={r.label} className="surface-card" style={{ padding: '18px 20px', opacity: hasData ? 1 : 0.55 }}>
+              <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 12 }}>{r.label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12 }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="mono muted" style={{ fontSize: 10.5, fontWeight: 600 }}>LEFT</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--serif)' }}>{r.l !== null && r.l !== undefined ? Number(r.l).toFixed(r.decimals) : '—'}</div>
+                </div>
+                <div style={{ width: 1, height: 36, background: 'var(--line)' }} />
+                <div>
+                  <div className="mono muted" style={{ fontSize: 10.5, fontWeight: 600 }}>RIGHT</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--serif)' }}>{r.r !== null && r.r !== undefined ? Number(r.r).toFixed(r.decimals) : '—'}</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="muted" style={{ fontSize: 11.5 }}>Asymmetry</div>
+                <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: asyColor(r.asy) }}>
+                  {r.asy !== null ? `${r.asy.toFixed(1)}%` : '—'}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="h3" style={{ color: 'var(--ink-3)', marginBottom: 10 }}>Trainer Recommendations</div>
+      <RecTextarea value={recs} onChange={setRecs} placeholder="Address asymmetries and unilateral output…" />
+    </div>
+  );
+}
+
+function InitialAssessmentTab({ assessment, setAssessment }) {
+  const fields = [
+    { key: 'currentInjuries',    label: 'Current Injuries',           placeholder: 'Active injuries, pain points, or movement restrictions to be aware of…' },
+    { key: 'injuryHistory',      label: 'Injury History',             placeholder: 'Prior surgeries, recurring injuries, or chronic issues…' },
+    { key: 'posturePresentation',label: 'Posture Presentation',       placeholder: 'Static posture findings: pelvic tilt, shoulder position, foot strike, etc.' },
+    { key: 'movementAnalysis',   label: 'Movement Analysis Summary',  placeholder: 'Observations from movement screen: deficits, compensations, asymmetries…' },
+  ];
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Intake</div>
+        <div className="h2">Initial Assessment</div>
+        <div className="muted" style={{ fontSize: 13, marginTop: 4, maxWidth: 640 }}>
+          Trainer notes on injury status, posture, and movement quality. Flows into the report PDF.
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+        {fields.map((f) => (
+          <div key={f.key}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>{f.label}</div>
+            <RecTextarea
+              value={assessment[f.key]}
+              onChange={(v) => setAssessment({ ...assessment, [f.key]: v })}
+              placeholder={f.placeholder}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrainingPlanTab({ goals, setGoals, allComposites, focusKeys, setFocusKeys }) {
+  const keys = focusKeys || [];
+  const toggleFocus = (key) => {
+    setFocusKeys(keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]);
+  };
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Action Plan</div>
+        <div className="h2">Training Goals & Prescription</div>
+      </div>
+      <div className="surface-card" style={{ padding: '20px 22px', marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, gap: 12 }}>
+          <div className="h3" style={{ color: 'var(--ink-3)' }}>Focus Areas</div>
+          <span className="pill" style={{ background: 'var(--accent-soft)', color: 'var(--accent-ink)', borderColor: 'transparent' }}>
+            <span className="dot" />Customizable
+          </span>
+        </div>
+        <div className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+          Select which tests to feature as focus areas on the report. The weakest tests are preselected — toggle any test to include or exclude it.
+        </div>
+        {allComposites.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            {allComposites.map((f) => {
+              const on = keys.includes(f.key);
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => toggleFocus(f.key)}
+                  aria-pressed={on}
+                  style={{
+                    display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, alignItems: 'center',
+                    padding: '12px 14px', borderRadius: 4, textAlign: 'left', width: '100%', cursor: 'pointer',
+                    border: `1px solid ${on ? 'var(--ink)' : 'var(--line)'}`,
+                    background: on ? 'var(--paper-2)' : '#fff',
+                    transition: 'border-color .12s, background .12s',
+                  }}
+                >
+                  <span style={{
+                    width: 20, height: 20, borderRadius: 4, flex: 'none',
+                    border: `1.5px solid ${on ? 'var(--ink)' : 'var(--line-2)'}`,
+                    background: on ? 'var(--ink)' : '#fff', color: 'var(--paper)',
+                    display: 'grid', placeItems: 'center',
+                  }}>
+                    {on && <I.check />}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{f.label}</div>
+                    <PercentileBar pct={f.pct} compact />
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 700 }}>{Math.round(f.pct)}<span className="muted" style={{ fontSize: 10 }}>%ile</span></div>
+                    <TierTag pct={f.pct} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="muted" style={{ fontSize: 13 }}>No test composites available to feature.</div>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>Goals</div>
+          <RecTextarea value={goals.goals} onChange={(v) => setGoals({ ...goals, goals: v })} placeholder="Concrete, measurable outcomes…" />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>Action Plan</div>
+          <RecTextarea value={goals.actionPlan} onChange={(v) => setGoals({ ...goals, actionPlan: v })} placeholder="Weekly structure, key sessions, reassessment date…" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+const ReportViewer = ({ athlete, selectedTests, onBack }) => {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingProgress, setGeneratingProgress] = useState(0);
-  const [activeTab, setActiveTab] = useState('initial-assessment');
+  const [activeTab, setActiveTab] = useState('assessment');
 
-  // Editable athlete info
-  const [athleteInfo, setAthleteInfo] = useState({
-    age: '',
-    height: '',
-    weight: ''
+  const [info, setInfo] = useState({ age: '', height: '', weight: '' });
+  const [assessment, setAssessment] = useState({ currentInjuries: '', injuryHistory: '', posturePresentation: '', movementAnalysis: '' });
+  const [recs, setRecs] = useState({ cmj: '', sj: '', imtp: '', hop: '', slcmj: '', ppu: '' });
+  const [goals, setGoals] = useState({ goals: '', actionPlan: '' });
+  const [focusKeys, setFocusKeys] = useState(null); // null = not yet initialized; array once composites load
+
+  const [selectedRadarKeys, setSelectedRadarKeys] = useState({
+    cmj: TEST_DEFS.cmj.defaultRadar,
+    squatJump: TEST_DEFS.squatJump.defaultRadar,
+    imtp: TEST_DEFS.imtp.defaultRadar,
+    hopTest: TEST_DEFS.hopTest.defaultRadar,
+    ppu: TEST_DEFS.ppu.defaultRadar,
   });
 
-  // Initial Assessment fields
-  const [initialAssessment, setInitialAssessment] = useState({
-    currentInjuries: '',
-    injuryHistory: '',
-    posturePresentation: '',
-    movementAnalysis: ''
-  });
-
-  // CMJ recommendations
-  const [cmjRecommendations, setCmjRecommendations] = useState('');
-
-  // Squat Jump recommendations
-  const [sjRecommendations, setSjRecommendations] = useState('');
-
-  // IMTP recommendations
-  const [imtpRecommendations, setImtpRecommendations] = useState('');
-
-  // PPU recommendations
-  const [ppuRecommendations, setPpuRecommendations] = useState('');
-
-  // Hop Test recommendations
-  const [hopRecommendations, setHopRecommendations] = useState('');
-
-  // Single Leg CMJ recommendations
-  const [slCmjRecommendations, setSlCmjRecommendations] = useState('');
-
-  // Training Goals & Action Plan
-  const [trainingGoals, setTrainingGoals] = useState({
-    goals: '',
-    actionPlan: ''
-  });
-
-  // Selected metrics for spider charts
-  const [selectedMetrics, setSelectedMetrics] = useState({
-    cmj: ['jumpHeight', 'rsi', 'peakPowerBM', 'eccentricBrakingRFD', 'concentricPeakVelocity', 'eccentricPeakPowerBM'],
-    squatJump: ['jumpHeight', 'forceAtPeakPower', 'concentricPeakVelocity', 'peakPower', 'peakPowerBM'],
-    hopTest: ['rsi', 'jumpHeight', 'gct'],
-    imtp: ['peakVerticalForce', 'peakForceBM', 'forceAt100ms', 'timeToPeakForce'],
-    ppu: ['pushupHeight', 'eccentricPeakForce', 'concentricPeakForce', 'concentricRFD_L', 'concentricRFD_R', 'eccentricBrakingRFD']
-  });
-
-  // Tab definitions - filter based on available test data
-  const getAvailableTabs = () => {
-    const allTabs = [
-      { id: 'initial-assessment', label: 'Initial Assessment', alwaysShow: true },
-      { id: 'cmj', label: 'CMJ', dataKey: 'cmj' },
-      { id: 'squat-jump', label: 'Squat Jump', dataKey: 'squatJump' },
-      { id: 'hop-test', label: 'Hop Test', dataKey: 'hopTest' },
-      { id: 'single-leg-cmj', label: 'Single Leg CMJ', dataKey: 'singleLegCMJ_Left' }, // Check if either left or right exists
-      { id: 'imtp', label: 'IMTP', dataKey: 'imtp' },
-      { id: 'plyo-pushup', label: 'Plyometric Push-Up', dataKey: 'ppu' },
-      { id: 'training-plan', label: 'Training Goals & Action Plan', alwaysShow: true }
-    ];
-
-    // Filter tabs based on available data
-    return allTabs.filter(tab => {
-      // Always show initial assessment and training plan
-      if (tab.alwaysShow) return true;
-
-      // For single leg CMJ, check if either left or right leg data exists
-      if (tab.id === 'single-leg-cmj') {
-        return reportData?.tests?.singleLegCMJ_Left || reportData?.tests?.singleLegCMJ_Right;
-      }
-
-      // For other tests, check if the data exists
-      return reportData?.tests?.[tab.dataKey];
-    });
-  };
-
-  const tabs = getAvailableTabs();
-
-  // Define all available metrics for each test type
-  const getAvailableMetrics = (testType) => {
-    const allMetrics = {
-      cmj: [
-        { key: 'jumpHeight', label: 'Jump Height' },
-        { key: 'rsi', label: 'RSI' },
-        { key: 'peakPowerBM', label: 'Peak Power / BM' },
-        { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD' },
-        { key: 'concentricPeakVelocity', label: 'Con Peak Velocity' },
-        { key: 'eccentricPeakPowerBM', label: 'Ecc Peak Power / BM' },
-        { key: 'forceAtZeroVelocity', label: 'Force @ Zero Velocity' },
-        { key: 'eccentricPeakForce', label: 'Ecc Peak Force' },
-        { key: 'concentricImpulse', label: 'Concentric Impulse' },
-        { key: 'eccentricPeakVelocity', label: 'Ecc Peak Velocity' },
-        { key: 'eccentricPeakPower', label: 'Ecc Peak Power' },
-        { key: 'peakPower', label: 'Peak Power' },
-        { key: 'countermovementDepth', label: 'Countermovement Depth' }
-      ],
-      squatJump: [
-        { key: 'jumpHeight', label: 'Jump Height' },
-        { key: 'forceAtPeakPower', label: 'Force @ Peak Power' },
-        { key: 'concentricPeakVelocity', label: 'Con Peak Velocity' },
-        { key: 'peakPower', label: 'Peak Power' },
-        { key: 'peakPowerBM', label: 'Peak Power / BW' }
-      ],
-      hopTest: [
-        { key: 'rsi', label: 'RSI' },
-        { key: 'jumpHeight', label: 'Jump Height' },
-        { key: 'gct', label: 'Ground Contact Time' }
-      ],
-      imtp: [
-        { key: 'peakVerticalForce', label: 'Peak Vertical Force' },
-        { key: 'peakForceBM', label: 'Peak Force / BM' },
-        { key: 'forceAt100ms', label: 'Force @ 100ms' },
-        { key: 'timeToPeakForce', label: 'Time to Peak Force' }
-      ],
-      ppu: [
-        { key: 'pushupHeight', label: 'Push-Up Height' },
-        { key: 'eccentricPeakForce', label: 'Ecc Peak Force' },
-        { key: 'concentricPeakForce', label: 'Con Peak Force' },
-        { key: 'concentricRFD_L', label: 'Con RFD (L)' },
-        { key: 'concentricRFD_R', label: 'Con RFD (R)' },
-        { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD' }
-      ]
-    };
-
-    return allMetrics[testType] || [];
-  };
-
-  // Handler to update selected metrics for a specific test type
-  const handleMetricsChange = (testType, newMetrics) => {
-    setSelectedMetrics(prev => ({
-      ...prev,
-      [testType]: newMetrics
-    }));
-  };
-
-  useEffect(() => {
-    if (athlete) {
-      fetchReportData();
-    }
-  }, [athlete, selectedTests]);
-
-  // Ensure active tab is valid when tabs change
-  useEffect(() => {
-    if (reportData && tabs.length > 0) {
-      const activeTabExists = tabs.some(tab => tab.id === activeTab);
-      if (!activeTabExists) {
-        // If current active tab doesn't exist in filtered tabs, switch to first tab
-        setActiveTab(tabs[0].id);
-      }
-    }
-  }, [reportData, activeTab]);
+  useEffect(() => { if (athlete) fetchReportData(); }, [athlete, selectedTests]);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -190,102 +548,110 @@ const ReportViewer = ({ athlete, selectedTests }) => {
         profileIds: athlete.profileIds || [athlete.id],
         name: athlete.name,
         position: athlete.position,
-        selectedTests: selectedTests || {}
+        selectedTests: selectedTests || {},
       });
-
       setReportData(response.data.data);
 
-      // Initialize athlete info from API data
       const data = response.data.data;
-      const weight = data.tests?.cmj?.weight || data.tests?.imtp?.weight || '';
-      const dateOfBirth = athlete?.dateOfBirth || '';
+      const weight = data?.tests?.cmj?.weight || data?.tests?.imtp?.weight;
       let age = '';
-
-      if (dateOfBirth) {
+      if (athlete?.dateOfBirth) {
         try {
-          const birthDate = new Date(dateOfBirth);
+          const birthDate = new Date(athlete.dateOfBirth);
           const today = new Date();
           const calculatedAge = Math.floor((today - birthDate) / (365.25 * 24 * 60 * 60 * 1000));
-          if (calculatedAge > 0 && calculatedAge < 120) {
-            age = calculatedAge.toString();
-          }
-        } catch (e) {
-          // Invalid date, leave age empty
-        }
+          if (calculatedAge > 0 && calculatedAge < 120) age = String(calculatedAge);
+        } catch (e) { /* ignore */ }
       }
-
-      setAthleteInfo({
-        age: age,
-        height: '',
-        weight: weight ? `${Math.round(weight * 2.20462)} lbs` : ''
-      });
-    } catch (error) {
-      console.error('Error fetching report:', error);
+      setInfo({ age, height: '', weight: weight ? `${Math.round(weight * 2.20462)} lbs` : '' });
+    } catch (e) {
+      console.error('Error fetching report:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate asymmetry percentage and get color
-  const calculateAsymmetry = (leftValue, rightValue) => {
-    if (!leftValue || !rightValue || leftValue === 0 || rightValue === 0) {
-      return { percentage: 'N/A', color: '#ccc' };
+  const compositesByTest = useMemo(() => {
+    if (!reportData) return {};
+    const out = {};
+    ['cmj', 'squatJump', 'imtp', 'hopTest', 'ppu'].forEach((k) => {
+      const m = buildMetrics(k, reportData);
+      const valid = m.map((x) => x.pct).filter((p) => p !== null && p !== undefined && !isNaN(p));
+      if (valid.length > 0) out[k] = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+    });
+    return out;
+  }, [reportData]);
+
+  // All test composites, sorted weakest-first (candidates for focus areas)
+  const allComposites = useMemo(() => {
+    return Object.entries(compositesByTest)
+      .map(([k, pct]) => ({ label: TEST_DEFS[k].title, pct, key: k }))
+      .sort((a, b) => a.pct - b.pct);
+  }, [compositesByTest]);
+
+  // Default focus-area selection = the 4 weakest tests. Only set once, when composites first load.
+  useEffect(() => {
+    if (focusKeys === null && allComposites.length > 0) {
+      setFocusKeys(allComposites.slice(0, 4).map((c) => c.key));
     }
+  }, [allComposites, focusKeys]);
 
-    const diff = Math.abs(leftValue - rightValue);
-    const avg = (leftValue + rightValue) / 2;
-    const asymmetry = (diff / avg) * 100;
+  const selectedFocusAreas = useMemo(() => {
+    if (!focusKeys) return [];
+    return allComposites.filter((c) => focusKeys.includes(c.key));
+  }, [allComposites, focusKeys]);
 
-    let color;
-    if (asymmetry <= 5) {
-      color = '#27AE60'; // Green
-    } else if (asymmetry <= 10) {
-      color = '#F39C12'; // Yellow/Orange
-    } else {
-      color = '#E74C3C'; // Red
-    }
+  const tabs = useMemo(() => {
+    if (!reportData) return [{ id: 'assessment', idx: 1, label: 'Assessment' }];
+    const list = [{ id: 'assessment', label: 'Assessment' }];
+    if (reportData.tests?.cmj)            list.push({ id: 'cmj',    label: 'CMJ' });
+    if (reportData.tests?.squatJump)      list.push({ id: 'sj',     label: 'Squat Jump' });
+    if (reportData.tests?.imtp)           list.push({ id: 'imtp',   label: 'IMTP' });
+    if (reportData.tests?.hopTest)        list.push({ id: 'hop',    label: 'Hop Test' });
+    if (reportData.tests?.singleLegCMJ_Left || reportData.tests?.singleLegCMJ_Right) list.push({ id: 'slcmj', label: 'Single Leg CMJ' });
+    if (reportData.tests?.ppu)            list.push({ id: 'ppu',    label: 'Plyometric Push-Up' });
+    list.push({ id: 'plan', label: 'Training Plan' });
+    return list.map((t, i) => ({ ...t, idx: i + 1 }));
+  }, [reportData]);
 
-    return {
-      percentage: asymmetry.toFixed(1) + '%',
-      color: color
-    };
-  };
+  useEffect(() => {
+    if (reportData && !tabs.some((t) => t.id === activeTab)) setActiveTab(tabs[0]?.id || 'assessment');
+  }, [reportData, tabs, activeTab]);
 
   const generatePDF = async () => {
     setSaving(true);
-    setGeneratingProgress(0); // Start progress
-
+    setGeneratingProgress(0);
     try {
       const reportPayload = {
         ...reportData,
-        athleteInfo: athleteInfo,
-        initialAssessment: initialAssessment,
-        cmjRecommendations: cmjRecommendations,
-        sjRecommendations: sjRecommendations,
-        hopRecommendations: hopRecommendations,
-        imtpRecommendations: imtpRecommendations,
-        slCmjRecommendations: slCmjRecommendations,
-        ppuRecommendations: ppuRecommendations,
-        trainingGoals: trainingGoals,
-        selectedMetrics: selectedMetrics  // Include selected metrics for spider charts
+        athleteInfo: info,
+        initialAssessment: assessment,
+        cmjRecommendations: recs.cmj,
+        sjRecommendations: recs.sj,
+        hopRecommendations: recs.hop,
+        imtpRecommendations: recs.imtp,
+        slCmjRecommendations: recs.slcmj,
+        ppuRecommendations: recs.ppu,
+        trainingGoals: goals,
+        selectedFocusKeys: focusKeys || [],
+        selectedFocusAreas,
+        selectedMetrics: {
+          cmj: selectedRadarKeys.cmj,
+          squatJump: selectedRadarKeys.squatJump,
+          imtp: selectedRadarKeys.imtp,
+          hopTest: selectedRadarKeys.hopTest,
+          ppu: selectedRadarKeys.ppu,
+        },
       };
 
-      // Simulate progress updates - slower to match actual PDF generation time
       const progressInterval = setInterval(() => {
-        setGeneratingProgress(prev => {
-          if (prev >= 90) return prev; // Cap at 90% until complete
-          return prev + 3;
-        });
+        setGeneratingProgress((p) => (p >= 90 ? p : p + 3));
       }, 2000);
 
-      const response = await axios.post('/api/reports/generate-pdf', reportPayload, {
-        responseType: 'blob'
-      });
-
+      const response = await axios.post('/api/reports/generate-pdf', reportPayload, { responseType: 'blob' });
       clearInterval(progressInterval);
-      setGeneratingProgress(100); // Complete
+      setGeneratingProgress(100);
 
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -294,1481 +660,69 @@ const ReportViewer = ({ athlete, selectedTests }) => {
       link.click();
       link.remove();
 
-      // Wait a bit to show 100% before closing
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (error) {
-      console.error('Error generating PDF:', error);
+      await new Promise((r) => setTimeout(r, 500));
+    } catch (e) {
+      console.error('Error generating PDF:', e);
       alert('Error generating PDF. Please try again.');
     } finally {
       setSaving(false);
-      setGeneratingProgress(0); // Reset
+      setGeneratingProgress(0);
     }
-  };
-
-  const getSpiderChartData = () => {
-    if (!reportData?.tests?.cmj || !reportData?.cmjComparison?.metrics) return null;
-
-    // Get all available metrics and filter to only selected ones
-    const allMetrics = getAvailableMetrics('cmj');
-    const keyMetrics = allMetrics.filter(metric =>
-      selectedMetrics.cmj.includes(metric.key)
-    );
-
-    const labels = [];
-    const athleteValues = [];
-    const mlbAverages = [];
-
-    keyMetrics.forEach(metric => {
-      const athleteValue = reportData.tests.cmj[metric.key];
-      const mlbStats = reportData.cmjComparison.metrics[metric.key];
-
-      if (athleteValue !== undefined && mlbStats && mlbStats.percentile !== undefined) {
-        labels.push(metric.label);
-
-        // Use actual percentile from database for accurate chart positioning
-        athleteValues.push(Math.max(0, Math.min(100, mlbStats.percentile)));
-        // Pro average (mean) should be at 50th percentile
-        mlbAverages.push(50);
-      }
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: athlete?.name || 'Athlete',
-          data: athleteValues,
-          backgroundColor: 'rgba(59, 130, 246, 0.4)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
-        },
-        {
-          label: 'MLB Average',
-          data: mlbAverages,
-          backgroundColor: 'rgba(243, 156, 18, 0.3)',
-          borderColor: 'rgba(243, 156, 18, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(243, 156, 18, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(243, 156, 18, 1)'
-        }
-      ]
-    };
-  };
-
-  const getSJSpiderChartData = () => {
-    if (!reportData?.tests?.squatJump || !reportData?.sjComparison?.metrics) return null;
-
-    // Get all available metrics and filter to only selected ones
-    const allMetrics = getAvailableMetrics('squatJump');
-    const keyMetrics = allMetrics.filter(metric =>
-      selectedMetrics.squatJump.includes(metric.key)
-    );
-
-    const labels = [];
-    const athleteValues = [];
-    const mlbAverages = [];
-
-    keyMetrics.forEach(metric => {
-      const athleteValue = reportData.tests.squatJump[metric.key];
-      const mlbStats = reportData.sjComparison.metrics[metric.key];
-
-      if (athleteValue !== undefined && mlbStats && mlbStats.percentile !== undefined) {
-        labels.push(metric.label);
-
-        // Use actual percentile from database for accurate chart positioning
-        athleteValues.push(Math.max(0, Math.min(100, mlbStats.percentile)));
-        // Pro average (mean) should be at 50th percentile
-        mlbAverages.push(50);
-      }
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: athlete?.name || 'Athlete',
-          data: athleteValues,
-          backgroundColor: 'rgba(59, 130, 246, 0.4)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
-        },
-        {
-          label: 'MLB Average',
-          data: mlbAverages,
-          backgroundColor: 'rgba(243, 156, 18, 0.3)',
-          borderColor: 'rgba(243, 156, 18, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(243, 156, 18, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(243, 156, 18, 1)'
-        }
-      ]
-    };
-  };
-
-  const getIMTPSpiderChartData = () => {
-    if (!reportData?.tests?.imtp || !reportData?.imtpComparison?.metrics) return null;
-
-    // Get all available metrics and filter to only selected ones
-    const allMetrics = getAvailableMetrics('imtp');
-    const keyMetrics = allMetrics.filter(metric =>
-      selectedMetrics.imtp.includes(metric.key)
-    );
-
-    const labels = [];
-    const athleteValues = [];
-    const mlbAverages = [];
-
-    keyMetrics.forEach(metric => {
-      const athleteValue = reportData.tests.imtp[metric.key];
-      const mlbStats = reportData.imtpComparison.metrics[metric.key];
-
-      if (athleteValue !== undefined && mlbStats && mlbStats.percentile !== undefined) {
-        labels.push(metric.label);
-
-        // Use actual percentile from database for accurate chart positioning
-        athleteValues.push(Math.max(0, Math.min(100, mlbStats.percentile)));
-        // Pro average (mean) should be at 50th percentile
-        mlbAverages.push(50);
-      }
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: athlete?.name || 'Athlete',
-          data: athleteValues,
-          backgroundColor: 'rgba(59, 130, 246, 0.4)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
-        },
-        {
-          label: 'MLB Average',
-          data: mlbAverages,
-          backgroundColor: 'rgba(243, 156, 18, 0.3)',
-          borderColor: 'rgba(243, 156, 18, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(243, 156, 18, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(243, 156, 18, 1)'
-        }
-      ]
-    };
-  };
-
-  // PPU Spider Chart Data
-  const getPPUSpiderChartData = () => {
-    if (!reportData?.tests?.ppu || !reportData?.ppuComparison?.metrics) return null;
-
-    // Get all available metrics and filter to only selected ones
-    const allMetrics = getAvailableMetrics('ppu');
-    const keyMetrics = allMetrics.filter(metric =>
-      selectedMetrics.ppu.includes(metric.key)
-    );
-
-    const labels = [];
-    const athleteValues = [];
-    const mlbAverages = [];
-
-    keyMetrics.forEach(metric => {
-      const athleteValue = reportData.tests.ppu[metric.key];
-      const mlbStats = reportData.ppuComparison.metrics[metric.key];
-
-      if (athleteValue !== undefined && mlbStats && mlbStats.percentile !== undefined) {
-        labels.push(metric.label);
-
-        // Use actual percentile from database for accurate chart positioning
-        athleteValues.push(Math.max(0, Math.min(100, mlbStats.percentile)));
-        // Pro average (mean) should be at 50th percentile
-        mlbAverages.push(50);
-      }
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: athlete?.name || 'Athlete',
-          data: athleteValues,
-          backgroundColor: 'rgba(59, 130, 246, 0.4)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
-        },
-        {
-          label: 'MLB Average',
-          data: mlbAverages,
-          backgroundColor: 'rgba(243, 156, 18, 0.3)',
-          borderColor: 'rgba(243, 156, 18, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(243, 156, 18, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(243, 156, 18, 1)'
-        }
-      ]
-    };
-  };
-
-  // CMJ Chart Options with custom tooltips
-  const getCMJChartOptions = () => {
-    if (!reportData?.tests?.cmj || !reportData?.cmjComparison?.metrics) return {};
-
-    const metrics = [
-      { key: 'jumpHeight', label: 'Jump Height', unit: 'in' },
-      { key: 'rsi', label: 'RSI', unit: '' },  // Standard RSI (changed from RSI-mod)
-      { key: 'peakPowerBM', label: 'Peak Power / BM', unit: 'W/kg' },
-      { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD', unit: 'N/s' },
-      { key: 'concentricPeakVelocity', label: 'Con Peak Velocity', unit: 'm/s' },
-      { key: 'eccentricPeakPowerBM', label: 'Ecc Peak Power / BM', unit: 'W/kg' }
-    ];
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: {
-        duration: 800,
-        easing: 'easeInOutQuart'
-      },
-      plugins: {
-        legend: {
-          position: 'top',
-        },
-        title: {
-          display: true,
-          text: 'CMJ Metrics vs MLB Professional Average'
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const metricIndex = context.dataIndex;
-              const metric = metrics.find(m => m.label === context.label);
-              if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
-
-              const athleteValue = reportData.cmjComparison.metrics[metric.key]?.value;
-              const mlbValue = reportData.cmjComparison.metrics[metric.key]?.proMean;
-              const percentile = reportData.cmjComparison.metrics[metric.key]?.percentile;
-
-              if (context.dataset.label.includes('Athlete') || context.dataset.label.includes(athlete?.name)) {
-                return `${context.dataset.label}: ${athleteValue?.toFixed(2) || 'N/A'} ${metric.unit} (${percentile?.toFixed(1) || 'N/A'}%)`;
-              } else {
-                return `${context.dataset.label}: ${mlbValue?.toFixed(2) || 'N/A'} ${metric.unit}`;
-              }
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          angleLines: {
-            display: true
-          },
-          suggestedMin: 0,
-          suggestedMax: 100,
-          ticks: {
-            stepSize: 20,
-            callback: function(value) {
-              return value + '%';
-            }
-          }
-        }
-      }
-    };
-  };
-
-  // SJ Chart Options with custom tooltips
-  const getSJChartOptions = () => {
-    if (!reportData?.tests?.squatJump || !reportData?.sjComparison?.metrics) return {};
-
-    const metrics = [
-      { key: 'jumpHeight', label: 'Jump Height', unit: 'in' },
-      { key: 'forceAtPeakPower', label: 'Force @ Peak Power', unit: 'N' },
-      { key: 'concentricPeakVelocity', label: 'Con Peak Velocity', unit: 'm/s' },
-      { key: 'peakPower', label: 'Peak Power', unit: 'W' },
-      { key: 'peakPowerBM', label: 'Peak Power / BW', unit: 'W/kg' }
-    ];
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-        },
-        title: {
-          display: true,
-          text: 'Squat Jump Metrics vs MLB Professional Average'
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const metric = metrics.find(m => m.label === context.label);
-              if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
-
-              const athleteValue = reportData.sjComparison.metrics[metric.key]?.value;
-              const mlbValue = reportData.sjComparison.metrics[metric.key]?.proMean;
-              const percentile = reportData.sjComparison.metrics[metric.key]?.percentile;
-
-              if (context.dataset.label.includes('Athlete') || context.dataset.label.includes(athlete?.name)) {
-                return `${context.dataset.label}: ${athleteValue?.toFixed(2) || 'N/A'} ${metric.unit} (${percentile?.toFixed(1) || 'N/A'}%)`;
-              } else {
-                return `${context.dataset.label}: ${mlbValue?.toFixed(2) || 'N/A'} ${metric.unit}`;
-              }
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          angleLines: {
-            display: true
-          },
-          suggestedMin: 0,
-          suggestedMax: 100,
-          ticks: {
-            stepSize: 20,
-            callback: function(value) {
-              return value + '%';
-            }
-          }
-        }
-      }
-    };
-  };
-
-  // IMTP Chart Options with custom tooltips
-  const getIMTPChartOptions = () => {
-    if (!reportData?.tests?.imtp || !reportData?.imtpComparison?.metrics) return {};
-
-    const metrics = [
-      { key: 'peakVerticalForce', label: 'Peak Vertical Force', unit: 'N' },
-      { key: 'peakForceBM', label: 'Peak Vertical Force / BM', unit: 'N/kg' },
-      { key: 'forceAt100ms', label: 'Force @ 100ms', unit: 'N' },
-      { key: 'timeToPeakForce', label: 'Time to Peak Force', unit: 's' }
-    ];
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-        },
-        title: {
-          display: true,
-          text: 'IMTP Metrics vs MLB Professional Average'
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const metric = metrics.find(m => m.label === context.label);
-              if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
-
-              const athleteValue = reportData.tests.imtp[metric.key];
-              const mlbValue = reportData.imtpComparison.metrics[metric.key]?.proMean;
-              const percentile = reportData.imtpComparison.metrics[metric.key]?.percentile;
-
-              if (context.dataset.label.includes('Athlete') || context.dataset.label.includes(athlete?.name)) {
-                return `${context.dataset.label}: ${athleteValue?.toFixed(2) || 'N/A'} ${metric.unit} (${percentile?.toFixed(1) || 'N/A'}%)`;
-              } else {
-                return `${context.dataset.label}: ${mlbValue?.toFixed(2) || 'N/A'} ${metric.unit}`;
-              }
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          angleLines: {
-            display: true
-          },
-          suggestedMin: 0,
-          suggestedMax: 100,
-          ticks: {
-            stepSize: 20,
-            callback: function(value) {
-              return value + '%';
-            }
-          }
-        }
-      }
-    };
-  };
-
-  //  PPU Chart Options with custom tooltips
-  const getPPUChartOptions = () => {
-    if (!reportData?.tests?.ppu || !reportData?.ppuComparison?.metrics) return {};
-
-    const metrics = [
-      { key: 'pushupHeight', label: 'Pushup Height', unit: 'in' },
-      { key: 'eccentricPeakForce', label: 'Ecc Peak Force', unit: 'N' },
-      { key: 'concentricPeakForce', label: 'Con Peak Force', unit: 'N' },
-      { key: 'concentricRFD_L', label: 'Con RFD L', unit: 'N/s' },
-      { key: 'concentricRFD_R', label: 'Con RFD R', unit: 'N/s' },
-      { key: 'eccentricBrakingRFD', label: 'Ecc Braking RFD', unit: 'N/s' }
-    ];
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-        },
-        title: {
-          display: true,
-          text: 'Plyometric Push Up Metrics vs MLB Professional Average'
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const metric = metrics.find(m => m.label === context.label);
-              if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
-
-              const athleteValue = reportData.ppuComparison.metrics[metric.key]?.value;
-              const mlbValue = reportData.ppuComparison.metrics[metric.key]?.proMean;
-              const percentile = reportData.ppuComparison.metrics[metric.key]?.percentile;
-
-              if (context.dataset.label.includes('Athlete') || context.dataset.label.includes(athlete?.name)) {
-                return `${context.dataset.label}: ${athleteValue?.toFixed(2) || 'N/A'} ${metric.unit} (${percentile?.toFixed(1) || 'N/A'}%)`;
-              } else {
-                return `${context.dataset.label}: ${mlbValue?.toFixed(2) || 'N/A'} ${metric.unit}`;
-              }
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          angleLines: {
-            display: true
-          },
-          suggestedMin: 0,
-          suggestedMax: 100,
-          ticks: {
-            stepSize: 20,
-            callback: function(value) {
-              return value + '%';
-            }
-          }
-        }
-      }
-    };
-  };
-
-  // Hop Test Spider Chart Data
-  const getHopTestSpiderChartData = () => {
-    if (!reportData?.tests?.hopTest || !reportData?.hopComparison?.metrics) return null;
-
-    // Get all available metrics and filter to only selected ones
-    const allMetrics = getAvailableMetrics('hopTest');
-    const keyMetrics = allMetrics.filter(metric =>
-      selectedMetrics.hopTest.includes(metric.key)
-    );
-
-    const labels = [];
-    const athleteValues = [];
-    const mlbAverages = [];
-
-    keyMetrics.forEach(metric => {
-      const mlbStats = reportData.hopComparison.metrics[metric.key];
-
-      if (mlbStats && mlbStats.percentile !== undefined) {
-        labels.push(metric.label);
-
-        // Use actual percentile from database for accurate chart positioning
-        athleteValues.push(Math.max(0, Math.min(100, mlbStats.percentile)));
-        // Pro average (mean) should be at 50th percentile
-        mlbAverages.push(50);
-      }
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: athlete?.name || 'Athlete',
-          data: athleteValues,
-          backgroundColor: 'rgba(59, 130, 246, 0.4)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
-        },
-        {
-          label: 'MLB Average',
-          data: mlbAverages,
-          backgroundColor: 'rgba(243, 156, 18, 0.3)',
-          borderColor: 'rgba(243, 156, 18, 1)',
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(243, 156, 18, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(243, 156, 18, 1)'
-        }
-      ]
-    };
-  };
-
-  // Hop Test Chart Options with custom tooltips
-  const getHopTestChartOptions = () => {
-    if (!reportData?.tests?.hopTest || !reportData?.hopComparison?.metrics) return {};
-
-    const metrics = [
-      { key: 'rsi', label: 'RSI', unit: '' },
-      { key: 'jumpHeight', label: 'Jump Height', unit: 'in' },
-      { key: 'gct', label: 'GCT', unit: 's' }
-    ];
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-        },
-        title: {
-          display: true,
-          text: 'Hop Test Metrics vs MLB Professional Average'
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const metric = metrics.find(m => m.label === context.label);
-              if (!metric) return context.dataset.label + ': ' + context.parsed.r.toFixed(1);
-
-              const athleteValue = reportData.hopComparison.metrics[metric.key]?.value;
-              const mlbValue = reportData.hopComparison.metrics[metric.key]?.proMean;
-              const percentile = reportData.hopComparison.metrics[metric.key]?.percentile;
-
-              if (context.dataset.label.includes('Athlete') || context.dataset.label.includes(athlete?.name)) {
-                return `${context.dataset.label}: ${athleteValue?.toFixed(2) || 'N/A'} ${metric.unit} (${percentile?.toFixed(1) || 'N/A'}%)`;
-              } else {
-                return `${context.dataset.label}: ${mlbValue?.toFixed(2) || 'N/A'} ${metric.unit}`;
-              }
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          angleLines: {
-            display: true
-          },
-          suggestedMin: 0,
-          suggestedMax: 100,
-          ticks: {
-            stepSize: 20,
-            callback: function(value) {
-              return value + '%';
-            }
-          }
-        }
-      }
-    };
   };
 
   if (loading) {
     return (
-      <div className="report-loading">
-        <div className="spinner"></div>
-        <p>Generating performance report...</p>
+      <div style={{ maxWidth: 1360, margin: '0 auto', padding: '60px 32px', textAlign: 'center' }}>
+        <div className="muted">Generating report…</div>
       </div>
     );
   }
 
-  if (!reportData && !athlete) {
+  if (!reportData) {
     return (
-      <div className="no-report">
-        <p>Select an athlete to view their report</p>
+      <div style={{ maxWidth: 1360, margin: '0 auto', padding: '60px 32px', textAlign: 'center' }}>
+        <div className="muted">Unable to load report.</div>
       </div>
     );
   }
 
-  // Render tab content
-  const renderTabContent = () => {
+  const renderTab = () => {
     switch (activeTab) {
-      case 'initial-assessment':
-        return (
-          <div className="tab-content">
-            <h2>Initial Assessment</h2>
-            <div className="assessment-section">
-              <div className="assessment-field">
-                <label>Current Status</label>
-                <textarea
-                  value={initialAssessment.currentInjuries}
-                  onChange={(e) => setInitialAssessment({...initialAssessment, currentInjuries: e.target.value})}
-                  placeholder="Document any current injuries or pain..."
-                  rows={5}
-                />
-              </div>
-
-              <div className="assessment-field">
-                <label>Injury History</label>
-                <textarea
-                  value={initialAssessment.injuryHistory}
-                  onChange={(e) => setInitialAssessment({...initialAssessment, injuryHistory: e.target.value})}
-                  placeholder="Document past injuries and recovery..."
-                  rows={5}
-                />
-              </div>
-
-              <div className="assessment-field">
-                <label>Posture Presentation</label>
-                <textarea
-                  value={initialAssessment.posturePresentation}
-                  onChange={(e) => setInitialAssessment({...initialAssessment, posturePresentation: e.target.value})}
-                  placeholder="Note postural observations..."
-                  rows={5}
-                />
-              </div>
-
-              <div className="assessment-field">
-                <label>Movement Analysis Summary</label>
-                <textarea
-                  value={initialAssessment.movementAnalysis}
-                  onChange={(e) => setInitialAssessment({...initialAssessment, movementAnalysis: e.target.value})}
-                  placeholder="Summarize movement quality and patterns..."
-                  rows={5}
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'cmj':
-        return (
-          <div className="tab-content">
-            <h2>Countermovement Jump (CMJ)</h2>
-
-            {/* Detailed CMJ Metrics Table */}
-            {reportData.tests?.cmj && (
-              <div className="metrics-table-section">
-                <h3>Detailed Metrics</h3>
-                <div className="cmj-metrics-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metric</th>
-                        <th>Athlete Value</th>
-                        <th>Percentile</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Jump Height</td>
-                        <td>{reportData.tests.cmj.jumpHeight ? `${reportData.tests.cmj.jumpHeight.toFixed(2)} in` : 'N/A'}</td>
-                        <td>{reportData.cmjComparison?.metrics?.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Braking RFD</td>
-                        <td>{reportData.tests.cmj.eccentricBrakingRFD?.toFixed(2) || 'N/A'} N/s</td>
-                        <td>{reportData.cmjComparison?.metrics?.eccentricBrakingRFD?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Force @ Zero Velocity</td>
-                        <td>{reportData.tests.cmj.forceAtZeroVelocity?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.cmjComparison?.metrics?.forceAtZeroVelocity?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Force</td>
-                        <td>{reportData.tests.cmj.eccentricPeakForce?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.cmjComparison?.metrics?.eccentricPeakForce?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Concentric Impulse</td>
-                        <td>{reportData.tests.cmj.concentricImpulse?.toFixed(2) || 'N/A'} Ns</td>
-                        <td>{reportData.cmjComparison?.metrics?.concentricImpulse?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Velocity</td>
-                        <td>{reportData.tests.cmj.eccentricPeakVelocity?.toFixed(2) || 'N/A'} m/s</td>
-                        <td>{reportData.cmjComparison?.metrics?.eccentricPeakVelocity?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Concentric Peak Velocity</td>
-                        <td>{reportData.tests.cmj.concentricPeakVelocity?.toFixed(2) || 'N/A'} m/s</td>
-                        <td>{reportData.cmjComparison?.metrics?.concentricPeakVelocity?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Power</td>
-                        <td>{reportData.tests.cmj.eccentricPeakPower?.toFixed(2) || 'N/A'} W</td>
-                        <td>{reportData.cmjComparison?.metrics?.eccentricPeakPower?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Power / BM</td>
-                        <td>{reportData.tests.cmj.eccentricPeakPowerBM?.toFixed(2) || 'N/A'} W/kg</td>
-                        <td>{reportData.cmjComparison?.metrics?.eccentricPeakPowerBM?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Peak Power</td>
-                        <td>{reportData.tests.cmj.peakPower?.toFixed(2) || 'N/A'} W</td>
-                        <td>{reportData.cmjComparison?.metrics?.peakPower?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Peak Power / BM</td>
-                        <td>{reportData.tests.cmj.peakPowerBM?.toFixed(2) || 'N/A'} W/kg</td>
-                        <td>{reportData.cmjComparison?.metrics?.peakPowerBM?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>RSI</td>
-                        <td>{reportData.tests.cmj.rsi?.toFixed(2) || 'N/A'}</td>
-                        <td>{reportData.cmjComparison?.metrics?.rsi?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Countermovement Depth</td>
-                        <td>{reportData.tests.cmj.countermovementDepth?.toFixed(2) || 'N/A'} cm</td>
-                        <td>{reportData.cmjComparison?.metrics?.countermovementDepth?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  {reportData.cmjComparison && (
-                    <p className="comparison-note">
-                      Compared against professional baseball players from MLB/MiLB
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Spider Chart */}
-            <div className="spider-chart-section">
-              <h3>Performance Comparison</h3>
-
-              {/* Metric Selector */}
-              <MetricSelector
-                testType="cmj"
-                availableMetrics={getAvailableMetrics('cmj')}
-                selectedMetrics={selectedMetrics.cmj}
-                onMetricsChange={(newMetrics) => handleMetricsChange('cmj', newMetrics)}
-              />
-
-              <div className="spider-chart-container">
-                {getSpiderChartData() && (
-                  <Radar data={getSpiderChartData()} options={getCMJChartOptions()} />
-                )}
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h3>Recommendations</h3>
-              <textarea
-                value={cmjRecommendations}
-                onChange={(e) => setCmjRecommendations(e.target.value)}
-                placeholder="Add training recommendations based on CMJ results..."
-                rows={8}
-              />
-            </div>
-          </div>
-        );
-
-      case 'squat-jump':
-        return (
-          <div className="tab-content">
-            <h2>Squat Jump (SJ)</h2>
-
-            {/* Detailed SJ Metrics Table */}
-            {reportData.tests?.squatJump && (
-              <div className="metrics-table-section">
-                <h3>Detailed Metrics</h3>
-                <div className="cmj-metrics-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metric</th>
-                        <th>Athlete Value</th>
-                        <th>Percentile</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Jump Height</td>
-                        <td>{reportData.tests.squatJump.jumpHeight ? `${(reportData.tests.squatJump.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
-                        <td>{reportData.sjComparison?.metrics?.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Force @ Peak Power</td>
-                        <td>{reportData.tests.squatJump.forceAtPeakPower?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.sjComparison?.metrics?.forceAtPeakPower?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Concentric Peak Velocity</td>
-                        <td>{reportData.tests.squatJump.concentricPeakVelocity?.toFixed(2) || 'N/A'} m/s</td>
-                        <td>{reportData.sjComparison?.metrics?.concentricPeakVelocity?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Peak Power</td>
-                        <td>{reportData.tests.squatJump.peakPower?.toFixed(2) || 'N/A'} W</td>
-                        <td>{reportData.sjComparison?.metrics?.peakPower?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Peak Power / BW</td>
-                        <td>{reportData.tests.squatJump.peakPowerBM?.toFixed(2) || 'N/A'} W/kg</td>
-                        <td>{reportData.sjComparison?.metrics?.peakPowerBM?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  {reportData.sjComparison && (
-                    <p className="comparison-note">
-                      Compared against professional baseball players from MLB/MiLB
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Spider Chart */}
-            {reportData.tests?.squatJump && reportData.sjComparison && (
-              <div className="spider-chart-section">
-                <h3>Performance Comparison</h3>
-
-                {/* Metric Selector */}
-                <MetricSelector
-                  testType="squatJump"
-                  availableMetrics={getAvailableMetrics('squatJump')}
-                  selectedMetrics={selectedMetrics.squatJump}
-                  onMetricsChange={(newMetrics) => handleMetricsChange('squatJump', newMetrics)}
-                />
-
-                <div className="spider-chart-container">
-                  {getSJSpiderChartData() && (
-                    <Radar data={getSJSpiderChartData()} options={getSJChartOptions()} />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h3>Recommendations</h3>
-              <textarea
-                value={sjRecommendations}
-                onChange={(e) => setSjRecommendations(e.target.value)}
-                placeholder="Add training recommendations based on Squat Jump results..."
-                rows={8}
-              />
-            </div>
-          </div>
-        );
-
-      case 'hop-test':
-        return (
-          <div className="tab-content">
-            <h2>Hop Test</h2>
-
-            {/* Detailed Hop Test Metrics Table */}
-            {reportData.tests?.hopTest && reportData.hopComparison?.metrics ? (
-              <div className="metrics-table-section">
-                <h3>Detailed Metrics</h3>
-                <div className="cmj-metrics-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metric</th>
-                        <th>Athlete Value</th>
-                        <th>Percentile</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>RSI (Reactive Strength Index)</td>
-                        <td>{reportData.hopComparison.metrics.rsi?.value?.toFixed(2) || 'N/A'}</td>
-                        <td>{reportData.hopComparison.metrics.rsi?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Jump Height</td>
-                        <td>{reportData.hopComparison.metrics.jumpHeight?.value?.toFixed(2) || 'N/A'} in</td>
-                        <td>{reportData.hopComparison.metrics.jumpHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Ground Contact Time (GCT)</td>
-                        <td>{reportData.hopComparison.metrics.gct?.value?.toFixed(3) || 'N/A'} s</td>
-                        <td>{reportData.hopComparison.metrics.gct?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  {reportData.hopComparison && (
-                    <p className="comparison-note">
-                      Compared against professional baseball players from MLB/MiLB
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="placeholder-section">
-                <p className="placeholder-text">No Hop Test data available for this athlete.</p>
-              </div>
-            )}
-
-            {/* Spider Chart */}
-            {reportData.tests?.hopTest && reportData.hopComparison && (
-              <div className="spider-chart-section">
-                <h3>Performance Comparison</h3>
-
-                {/* Metric Selector */}
-                <MetricSelector
-                  testType="hopTest"
-                  availableMetrics={getAvailableMetrics('hopTest')}
-                  selectedMetrics={selectedMetrics.hopTest}
-                  onMetricsChange={(newMetrics) => handleMetricsChange('hopTest', newMetrics)}
-                />
-
-                <div className="spider-chart-container">
-                  {getHopTestSpiderChartData() && (
-                    <Radar data={getHopTestSpiderChartData()} options={getHopTestChartOptions()} />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h3>Recommendations</h3>
-              <textarea
-                value={hopRecommendations}
-                onChange={(e) => setHopRecommendations(e.target.value)}
-                placeholder="Add training recommendations based on Hop Test results..."
-                rows={8}
-              />
-            </div>
-          </div>
-        );
-
-      case 'single-leg-cmj':
-        const leftData = reportData?.tests?.singleLegCMJ_Left;
-        const rightData = reportData?.tests?.singleLegCMJ_Right;
-
-        return (
-          <div className="tab-content">
-            <h2>Single Leg Countermovement Jump</h2>
-
-            {/* Warning if only one leg found */}
-            {reportData?.slCmjWarning && (
-              <div className="warning-banner" style={{
-                backgroundColor: '#fef3cd',
-                border: '1px solid #ffc107',
-                borderRadius: '6px',
-                padding: '12px 16px',
-                marginBottom: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <span style={{ fontSize: '18px' }}>⚠️</span>
-                <span style={{ color: '#856404' }}>{reportData.slCmjWarning}</span>
-              </div>
-            )}
-
-            {(leftData || rightData) ? (
-              <div className="metrics-table-section">
-                <h3>Left vs Right Comparison</h3>
-                <div className="cmj-metrics-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metric</th>
-                        <th>Left</th>
-                        <th>Right</th>
-                        <th>Asymmetry</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Jump Height</td>
-                        <td>{leftData?.jumpHeight ? `${(leftData.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
-                        <td>{rightData?.jumpHeight ? `${(rightData.jumpHeight / 2.54).toFixed(2)} in` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.jumpHeight, rightData?.jumpHeight).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.jumpHeight, rightData?.jumpHeight).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Force</td>
-                        <td>{leftData?.eccentricPeakForce ? `${leftData.eccentricPeakForce.toFixed(2)} N` : 'N/A'}</td>
-                        <td>{rightData?.eccentricPeakForce ? `${rightData.eccentricPeakForce.toFixed(2)} N` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.eccentricPeakForce, rightData?.eccentricPeakForce).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.eccentricPeakForce, rightData?.eccentricPeakForce).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Braking RFD</td>
-                        <td>{leftData?.eccentricBrakingRFD ? `${leftData.eccentricBrakingRFD.toFixed(2)} N/s` : 'N/A'}</td>
-                        <td>{rightData?.eccentricBrakingRFD ? `${rightData.eccentricBrakingRFD.toFixed(2)} N/s` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.eccentricBrakingRFD, rightData?.eccentricBrakingRFD).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.eccentricBrakingRFD, rightData?.eccentricBrakingRFD).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Concentric Peak Force</td>
-                        <td>{leftData?.concentricPeakForce ? `${leftData.concentricPeakForce.toFixed(2)} N` : 'N/A'}</td>
-                        <td>{rightData?.concentricPeakForce ? `${rightData.concentricPeakForce.toFixed(2)} N` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.concentricPeakForce, rightData?.concentricPeakForce).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.concentricPeakForce, rightData?.concentricPeakForce).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Velocity</td>
-                        <td>{leftData?.eccentricPeakVelocity ? `${leftData.eccentricPeakVelocity.toFixed(2)} m/s` : 'N/A'}</td>
-                        <td>{rightData?.eccentricPeakVelocity ? `${rightData.eccentricPeakVelocity.toFixed(2)} m/s` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.eccentricPeakVelocity, rightData?.eccentricPeakVelocity).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.eccentricPeakVelocity, rightData?.eccentricPeakVelocity).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Concentric Peak Velocity</td>
-                        <td>{leftData?.concentricPeakVelocity ? `${leftData.concentricPeakVelocity.toFixed(2)} m/s` : 'N/A'}</td>
-                        <td>{rightData?.concentricPeakVelocity ? `${rightData.concentricPeakVelocity.toFixed(2)} m/s` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.concentricPeakVelocity, rightData?.concentricPeakVelocity).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.concentricPeakVelocity, rightData?.concentricPeakVelocity).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Peak Power / BW</td>
-                        <td>{leftData?.peakPowerBM ? `${leftData.peakPowerBM.toFixed(2)} W/kg` : 'N/A'}</td>
-                        <td>{rightData?.peakPowerBM ? `${rightData.peakPowerBM.toFixed(2)} W/kg` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.peakPowerBM, rightData?.peakPowerBM).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.peakPowerBM, rightData?.peakPowerBM).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>RSI</td>
-                        <td>{leftData?.rsi ? leftData.rsi.toFixed(3) : 'N/A'}</td>
-                        <td>{rightData?.rsi ? rightData.rsi.toFixed(3) : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.rsi, rightData?.rsi).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.rsi, rightData?.rsi).percentage}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Peak Power</td>
-                        <td>{leftData?.peakPower ? `${leftData.peakPower.toFixed(2)} W` : 'N/A'}</td>
-                        <td>{rightData?.peakPower ? `${rightData.peakPower.toFixed(2)} W` : 'N/A'}</td>
-                        <td style={{
-                          color: calculateAsymmetry(leftData?.peakPower, rightData?.peakPower).color,
-                          fontWeight: '600'
-                        }}>
-                          {calculateAsymmetry(leftData?.peakPower, rightData?.peakPower).percentage}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ marginTop: '1rem', padding: '1rem', background: '#F8F9FA', borderRadius: '6px' }}>
-                  <h4 style={{ color: '#2C3E50', fontSize: '1rem', marginBottom: '0.5rem' }}>Asymmetry Color Guide:</h4>
-                  <div style={{ display: 'flex', gap: '2rem', fontSize: '0.9rem' }}>
-                    <div><span style={{ color: '#27AE60', fontWeight: '600' }}>● Green:</span> ≤5% (Good)</div>
-                    <div><span style={{ color: '#F39C12', fontWeight: '600' }}>● Yellow:</span> 5-10% (Moderate)</div>
-                    <div><span style={{ color: '#E74C3C', fontWeight: '600' }}>● Red:</span> &gt;10% (High)</div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="placeholder-section">
-                <p className="placeholder-text">No Single Leg CMJ data available for this athlete.</p>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h3>Recommendations</h3>
-              <textarea
-                value={slCmjRecommendations}
-                onChange={(e) => setSlCmjRecommendations(e.target.value)}
-                placeholder="Add training recommendations based on Single Leg CMJ results..."
-                rows={8}
-              />
-            </div>
-          </div>
-        );
-
-      case 'imtp':
-        return (
-          <div className="tab-content">
-            <h2>Isometric Mid-Thigh Pull (IMTP)</h2>
-
-            {/* Detailed IMTP Metrics Table */}
-            {reportData.tests?.imtp && (
-              <div className="metrics-table-section">
-                <h3>Detailed Metrics</h3>
-                <div className="cmj-metrics-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metric</th>
-                        <th>Athlete Value</th>
-                        <th>Percentile</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Peak Vertical Force</td>
-                        <td>{reportData.tests.imtp.peakVerticalForce?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.imtpComparison?.metrics?.peakVerticalForce?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Peak Vertical Force / BM</td>
-                        <td>{reportData.tests.imtp.peakForceBM?.toFixed(2) || 'N/A'} N/kg</td>
-                        <td>{reportData.imtpComparison?.metrics?.peakForceBM?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Force @ 100ms</td>
-                        <td>{reportData.tests.imtp.forceAt100ms?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.imtpComparison?.metrics?.forceAt100ms?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Time to Peak Force</td>
-                        <td>{reportData.tests.imtp.timeToPeakForce?.toFixed(3) || 'N/A'} s</td>
-                        <td>{reportData.imtpComparison?.metrics?.timeToPeakForce?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  {reportData.imtpComparison && (
-                    <p className="comparison-note">
-                      Compared against professional baseball players from MLB/MiLB
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Spider Chart */}
-            {reportData.tests?.imtp && reportData.imtpComparison && (
-              <div className="spider-chart-section">
-                <h3>Performance Comparison</h3>
-
-                {/* Metric Selector */}
-                <MetricSelector
-                  testType="imtp"
-                  availableMetrics={getAvailableMetrics('imtp')}
-                  selectedMetrics={selectedMetrics.imtp}
-                  onMetricsChange={(newMetrics) => handleMetricsChange('imtp', newMetrics)}
-                />
-
-                <div className="spider-chart-container">
-                  {getIMTPSpiderChartData() && (
-                    <Radar data={getIMTPSpiderChartData()} options={getIMTPChartOptions()} />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h3>Recommendations</h3>
-              <textarea
-                value={imtpRecommendations}
-                onChange={(e) => setImtpRecommendations(e.target.value)}
-                placeholder="Add training recommendations based on IMTP results..."
-                rows={8}
-              />
-            </div>
-          </div>
-        );
-
-      case 'plyo-pushup':
-        return (
-          <div className="tab-content">
-            <h2>Plyometric Push-Up (PPU)</h2>
-
-            {/* Detailed PPU Metrics Table */}
-            {reportData.tests?.ppu && (
-              <div className="metrics-table-section">
-                <h3>Detailed Metrics</h3>
-                <div className="cmj-metrics-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metric</th>
-                        <th>Athlete Value</th>
-                        <th>Percentile</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Pushup Height</td>
-                        <td>{reportData.ppuComparison?.metrics?.pushupHeight?.value?.toFixed(2) || 'N/A'} in</td>
-                        <td>{reportData.ppuComparison?.metrics?.pushupHeight?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Peak Force</td>
-                        <td>{reportData.tests.ppu.eccentricPeakForce?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.ppuComparison?.metrics?.eccentricPeakForce?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Concentric Peak Force</td>
-                        <td>{reportData.tests.ppu.concentricPeakForce?.toFixed(2) || 'N/A'} N</td>
-                        <td>{reportData.ppuComparison?.metrics?.concentricPeakForce?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Concentric RFD Left</td>
-                        <td>{reportData.tests.ppu.concentricRFD_L?.toFixed(2) || 'N/A'} N/s</td>
-                        <td>{reportData.ppuComparison?.metrics?.concentricRFD_L?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Concentric RFD Right</td>
-                        <td>{reportData.tests.ppu.concentricRFD_R?.toFixed(2) || 'N/A'} N/s</td>
-                        <td>{reportData.ppuComparison?.metrics?.concentricRFD_R?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                      <tr>
-                        <td>Eccentric Braking RFD</td>
-                        <td>{reportData.tests.ppu.eccentricBrakingRFD?.toFixed(2) || 'N/A'} N/s</td>
-                        <td>{reportData.ppuComparison?.metrics?.eccentricBrakingRFD?.percentile?.toFixed(1) || 'N/A'}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  {reportData.ppuComparison?.summary?.totalTests && (
-                    <p className="comparison-note">
-                      Compared against professional baseball players from MLB/MiLB
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Spider Chart */}
-            {reportData.tests?.ppu && reportData.ppuComparison && (
-              <div className="spider-chart-section">
-                <h3>Performance Comparison</h3>
-
-                {/* Metric Selector */}
-                <MetricSelector
-                  testType="ppu"
-                  availableMetrics={getAvailableMetrics('ppu')}
-                  selectedMetrics={selectedMetrics.ppu}
-                  onMetricsChange={(newMetrics) => handleMetricsChange('ppu', newMetrics)}
-                />
-
-                <div className="spider-chart-container">
-                  {getPPUSpiderChartData() && (
-                    <Radar data={getPPUSpiderChartData()} options={getPPUChartOptions()} />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h3>Recommendations</h3>
-              <textarea
-                value={ppuRecommendations}
-                onChange={(e) => setPpuRecommendations(e.target.value)}
-                placeholder="Add training recommendations based on PPU results..."
-                rows={8}
-              />
-            </div>
-          </div>
-        );
-
-      case 'training-plan':
-        return (
-          <div className="tab-content">
-            <h2>Training Goals & Action Plan</h2>
-            <div className="assessment-section">
-              <div className="assessment-field">
-                <label>Training Goals</label>
-                <textarea
-                  value={trainingGoals.goals}
-                  onChange={(e) => setTrainingGoals({...trainingGoals, goals: e.target.value})}
-                  placeholder="Define specific, measurable training goals for this athlete..."
-                  rows={8}
-                />
-              </div>
-
-              <div className="assessment-field">
-                <label>Action Plan</label>
-                <textarea
-                  value={trainingGoals.actionPlan}
-                  onChange={(e) => setTrainingGoals({...trainingGoals, actionPlan: e.target.value})}
-                  placeholder="Outline the step-by-step action plan to achieve the training goals..."
-                  rows={10}
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
+      case 'assessment': return <InitialAssessmentTab assessment={assessment} setAssessment={setAssessment} />;
+      case 'cmj': return <TestTab testKey="cmj" reportData={reportData} recs={recs.cmj} setRecs={(v) => setRecs({ ...recs, cmj: v })}
+        selectedRadarKeys={selectedRadarKeys.cmj} setSelectedRadarKeys={(k) => setSelectedRadarKeys({ ...selectedRadarKeys, cmj: k })} />;
+      case 'sj': return <TestTab testKey="squatJump" reportData={reportData} recs={recs.sj} setRecs={(v) => setRecs({ ...recs, sj: v })}
+        selectedRadarKeys={selectedRadarKeys.squatJump} setSelectedRadarKeys={(k) => setSelectedRadarKeys({ ...selectedRadarKeys, squatJump: k })} />;
+      case 'imtp': return <TestTab testKey="imtp" reportData={reportData} recs={recs.imtp} setRecs={(v) => setRecs({ ...recs, imtp: v })}
+        selectedRadarKeys={selectedRadarKeys.imtp} setSelectedRadarKeys={(k) => setSelectedRadarKeys({ ...selectedRadarKeys, imtp: k })} />;
+      case 'hop': return <TestTab testKey="hopTest" reportData={reportData} recs={recs.hop} setRecs={(v) => setRecs({ ...recs, hop: v })}
+        selectedRadarKeys={selectedRadarKeys.hopTest} setSelectedRadarKeys={(k) => setSelectedRadarKeys({ ...selectedRadarKeys, hopTest: k })} />;
+      case 'ppu': return <TestTab testKey="ppu" reportData={reportData} recs={recs.ppu} setRecs={(v) => setRecs({ ...recs, ppu: v })}
+        selectedRadarKeys={selectedRadarKeys.ppu} setSelectedRadarKeys={(k) => setSelectedRadarKeys({ ...selectedRadarKeys, ppu: k })} />;
+      case 'slcmj': return <SingleLegTab reportData={reportData} recs={recs.slcmj} setRecs={(v) => setRecs({ ...recs, slcmj: v })} />;
+      case 'plan': return <TrainingPlanTab goals={goals} setGoals={setGoals} allComposites={allComposites} focusKeys={focusKeys} setFocusKeys={setFocusKeys} />;
+      default: return null;
     }
   };
 
   return (
-    <div className="report-viewer-container">
-      {/* Report Header */}
-      <div className="report-header-new">
-        <div className="header-logo-section">
-          <img src="/push-performance-logo.png" alt="Push Performance" className="company-logo" />
-          <div className="header-divider"></div>
-          <h1 className="report-title">Performance Assessment Report</h1>
-        </div>
-        <div className="athlete-info-card">
-          <div className="athlete-info-row">
-            <div className="athlete-info-main">
-              <h2 className="athlete-name">{athlete?.name}</h2>
-              <p className="report-date">{new Date().toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}</p>
-            </div>
-            <div className="athlete-info-details">
-              <div className="info-field">
-                <label>Age</label>
-                <input
-                  type="text"
-                  value={athleteInfo.age}
-                  onChange={(e) => setAthleteInfo({...athleteInfo, age: e.target.value})}
-                  placeholder="--"
-                  className="info-input"
-                />
-              </div>
-              <div className="info-field">
-                <label>Height</label>
-                <input
-                  type="text"
-                  value={athleteInfo.height}
-                  onChange={(e) => setAthleteInfo({...athleteInfo, height: e.target.value})}
-                  placeholder="e.g., 6'2&quot;"
-                  className="info-input"
-                />
-              </div>
-              <div className="info-field">
-                <label>Weight</label>
-                <input
-                  type="text"
-                  value={athleteInfo.weight}
-                  onChange={(e) => setAthleteInfo({...athleteInfo, weight: e.target.value})}
-                  placeholder="e.g., 210 lbs"
-                  className="info-input"
-                />
-              </div>
-            </div>
-          </div>
+    <div style={{ maxWidth: 1360, margin: '0 auto', padding: '32px 32px 60px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+        <button className="btn btn-ghost btn-sm" onClick={onBack}><I.back /> Back</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn btn-accent"
+            onClick={generatePDF}
+            disabled={saving}
+          >
+            {saving ? `Generating… ${generatingProgress}%` : 'Export PDF'}
+          </button>
         </div>
       </div>
 
-      {/* Main Content with Sidebar */}
-      <div className="report-content-wrapper">
-        {/* Sidebar Navigation */}
-        <aside className="sidebar-navigation">
-          <div className="sidebar-header">REPORT SECTIONS</div>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              className={`sidebar-button ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </aside>
-
-        {/* Tab Content */}
-        <div className="report-content">
-          {renderTabContent()}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="report-actions">
-        <button
-          className="save-btn"
-          onClick={generatePDF}
-          disabled={saving}
-        >
-          {saving ? 'Generating PDF...' : 'Download PDF Report'}
-        </button>
-      </div>
-
-      {/* PDF Generation Progress Modal */}
-      {saving && (
-        <div className="pdf-generation-modal">
-          <div className="pdf-generation-content">
-            <div className="pdf-generation-header">
-              <h3>Generating Performance Report</h3>
-              <p>Please wait while we create your PDF...</p>
-            </div>
-
-            <div className="progress-bar-container">
-              <div className="progress-bar">
-                <div
-                  className="progress-bar-fill"
-                  style={{ width: `${generatingProgress}%` }}
-                ></div>
-              </div>
-              <div className="progress-percentage">{generatingProgress}%</div>
-            </div>
-
-            <div className="progress-steps">
-              <div className={`progress-step ${generatingProgress >= 20 ? 'completed' : ''}`}>
-                <div className="step-icon">✓</div>
-                <div className="step-text">Collecting data</div>
-              </div>
-              <div className={`progress-step ${generatingProgress >= 40 ? 'completed' : ''}`}>
-                <div className="step-icon">✓</div>
-                <div className="step-text">Generating charts</div>
-              </div>
-              <div className={`progress-step ${generatingProgress >= 60 ? 'completed' : ''}`}>
-                <div className="step-icon">✓</div>
-                <div className="step-text">Creating layout</div>
-              </div>
-              <div className={`progress-step ${generatingProgress >= 80 ? 'completed' : ''}`}>
-                <div className="step-icon">✓</div>
-                <div className="step-text">Rendering PDF</div>
-              </div>
-              <div className={`progress-step ${generatingProgress === 100 ? 'completed' : ''}`}>
-                <div className="step-icon">✓</div>
-                <div className="step-text">Complete</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AthleteHeader athlete={athlete} info={info} setInfo={setInfo} />
+      <ReportTabs tabs={tabs} active={activeTab} setActive={setActiveTab} />
+      {renderTab()}
     </div>
   );
 };

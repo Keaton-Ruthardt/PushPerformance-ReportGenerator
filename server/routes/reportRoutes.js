@@ -9,6 +9,13 @@ import { getPPUComparativeAnalysis } from '../services/ppuComparativeService.js'
 import { getComparativeAnalysis as getHopComparativeAnalysis } from '../services/hopComparativeService.js';
 import { generatePDF } from '../services/pdfServiceWithComparative.js';
 import { generatePdfFromHtml } from '../services/puppeteerPdfService.js';
+import { generateEditorialPdf } from '../services/editorialPdfService.js';
+
+const PUSH_TENANT = {
+  slug: 'push',
+  facilityName: 'Push Performance',
+  logoPath: 'client/public/push-performance-logo.png',
+};
 import { query as bqQuery, dataset as datasetName } from '../config/bigquery.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -806,8 +813,8 @@ router.post('/generate-pdf', async (req, res) => {
       fs.mkdirSync(reportsDir, { recursive: true });
     }
 
-    // Generate PDF using Puppeteer (renders web UI as PDF)
-    await generatePdfFromHtml(reportData, outputPath);
+    // Generate PDF using the new editorial design
+    await generateEditorialPdf(reportData, outputPath, PUSH_TENANT);
 
     // Send file as response
     res.download(outputPath, filename, (err) => {

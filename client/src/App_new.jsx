@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import AthleteSearch from './components/AthleteSearch.jsx';
 import TestSelection from './components/TestSelection.jsx';
 import ReportViewer from './components/ReportViewer.jsx';
-import './App.css';
+import { Topbar, Stepper } from './components/Shell.jsx';
 
 function App() {
   const [selectedAthlete, setSelectedAthlete] = useState(null);
   const [selectedTests, setSelectedTests] = useState(null);
-  const [currentStep, setCurrentStep] = useState('search'); // 'search', 'test-selection', or 'report'
+  const [currentStep, setCurrentStep] = useState('search');
 
   const handleSelectAthlete = (athlete) => {
     setSelectedAthlete(athlete);
@@ -30,20 +30,22 @@ function App() {
     setCurrentStep('test-selection');
   };
 
-  return (
-    <div className="App">
-      <header className="App-header">
-        <div className="header-content">
-          <img src="/push-performance-logo.png" alt="Push Performance" className="app-logo" />
-        </div>
-        {currentStep !== 'search' && (
-          <button className="back-button" onClick={handleBackToSearch}>
-            ← Back to Search
-          </button>
-        )}
-      </header>
+  const stepIndex =
+    currentStep === 'search' ? 0
+    : currentStep === 'test-selection' ? 1
+    : 2;
 
-      <main className="App-main">
+  const crumbs =
+    currentStep === 'search' ? ['Assessments', 'New']
+    : currentStep === 'test-selection' ? ['Assessments', selectedAthlete?.name || '', 'Tests']
+    : ['Assessments', selectedAthlete?.name || '', 'Report'];
+
+  return (
+    <div className="app-shell">
+      <Topbar crumbs={crumbs} athlete={stepIndex > 0 ? selectedAthlete : null} />
+      <Stepper current={stepIndex} />
+
+      <main style={{ flex: 1 }}>
         {currentStep === 'search' && (
           <AthleteSearch onSelectAthlete={handleSelectAthlete} />
         )}
@@ -64,10 +66,6 @@ function App() {
           />
         )}
       </main>
-
-      <footer className="App-footer">
-        <p>Push Performance © {new Date().getFullYear()} | Professional Athletic Assessment</p>
-      </footer>
     </div>
   );
 }
